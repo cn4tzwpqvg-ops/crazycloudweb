@@ -32,7 +32,7 @@ const dbPath = path.join(__dirname, "database.sqlite");
 const db = new Database(dbPath);
 
 
-console.log("Запуск бота и сервера");
+console.log("Запуск бота и сервера1");
 console.log(" Telegram token:", TOKEN ? "OK" : " отсутствует");
 console.log(" Сервер будет слушать:", `http://${HOST}:${PORT}`);
 console.log(" База данных SQLite:", dbPath);

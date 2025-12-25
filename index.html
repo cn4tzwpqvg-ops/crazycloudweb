@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CRAZY CLOUD</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="main.js"></script>
+
+<!-- SEO & PWA-ish -->
+<meta name="description" content="CRAZY CLOUD — магазин жидкостей. Большой выбор вкусов, быстрая доставка.">
+<meta name="theme-color" content="#111111">
+<link rel="icon" href="favicon.png" />
+
+<!-- Preload images -->
+<link rel="preload" as="image" href="elfbar1.jpg">
+<link rel="preload" as="image" href="chaserlux1.jpg">
+<link rel="preload" as="image" href="vozol2.jpg">
+<link rel="preload" as="image" href="chaserblack1.jpg">
+<link rel="preload" as="image" href="chaserspecial1.jpg">
+<link rel="preload" as="image" href="chasermix1.jpeg">
+<link rel="stylesheet" href="style.css">
+
+<link href="https://fonts.googleapis.com/css2?family=Sacramento&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Lobster&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Alex+Brush&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Satisfy&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Major+Mono+Display&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+
+</head>
+
+<body>
+<header>
+  <button class="icon-btn burger" id="burger" aria-label="Открыть меню">
+    <span class="burger-lines" aria-hidden="true"><span></span><span></span><span></span></span>
+  </button>
+
+  <div class="logo"><span>CRAZY</span><span>CLOUD</span></div>
+
+  <button class="icon-btn" id="cart" aria-label="Открыть корзину" style="position:relative">
+    🛒
+    <span id="cart-count" class="cart-count">0</span>
+  </button>
+</header>
+
+ <!-- МЕНЮ — только один блок -->
+<div id="menu-backdrop" class="menu-backdrop">
+  <nav id="side-menu" class="side-menu">
+
+    <!-- Крестик закрытия -->
+    <button id="side-menu-close" class="side-close-btn">✕</button>
+
+    <a href="index.html" class="active">Главная</a>
+    <a href="reviews.html">Отзывы</a>
+    <a href="delivery.html">Доставка и оплата</a>
+    <a href="https://t.me/crazycloud_manager" target="_blank" rel="noopener">Написать менеджеру</a>
+  </nav>
+</div>
+
+
+
+<main class="wrap">
+  <div id="categories" class="categories" role="tablist" aria-label="Категории"></div>
+  <div id="product-card" class="product-card" aria-live="polite"></div>
+</main>
+
+<!-- cart overlay & modal -->
+<div id="cart-overlay" aria-hidden="true"></div>
+
+<aside id="cart-modal" aria-hidden="true">
+  <div class="cart-top">
+    <h2 style="margin:0">Корзина</h2>
+    <button class="cart-close" id="cart-close" aria-label="Закрыть корзину">✖</button>
+  </div>
+  <div id="cart-list" role="list"></div>
+  <div class="cart-footer">
+    <div style="font-weight:700">Итого: <span id="cart-total">0</span>€</div>
+    <button id="back-to-flavors" class="back-btn">Добавить еще</button>
+    <button id="checkout" class="checkout-btn">Продолжить</button>
+  </div>
+</aside>
+
+<!-- flying dot element -->
+<div id="fly-dot" class="fly-dot" aria-hidden="true" style="position:fixed;left:-9999px;top:-9999px;width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:0 6px 18px rgba(255,30,155,0.14);pointer-events:none;opacity:0;transform:translate(-50%,-50%) scale(1);"></div>
+<!-- Новый checkout modal -->
+<div id="checkout-modal" class="checkout-modal">
+  <div class="checkout-modal-content">
+    <h2 class="checkout-title">Оформление заказа</h2>
+
+    <!-- Город -->
+    <label for="checkout-city" class="checkout-label">Город:</label>
+    <select id="checkout-city" class="checkout-select">
+      <option value="">Выберите город</option>
+      <option value="Bonn">Bonn</option>
+      <option value="Cologne">Cologne</option>
+      <option value="Düsseldorf">Düsseldorf</option>
+      <option value="Dortmund">Dortmund</option>
+      <option value="Essen">Essen</option>
+      <option value="Bochum">Bochum</option>
+      <option value="Bielefeld">Bielefeld</option>
+      <option value="Paderborn">Paderborn</option>
+      <option value="Hamm">Hamm</option>
+      <option value="Münster">Münster</option>
+    </select>
+
+    <!-- Способ доставки -->
+    <label for="checkout-delivery" class="checkout-label">Доставка:</label>
+    <select id="checkout-delivery" class="checkout-select" disabled>
+      <option value="">Выберите город сначала</option>
+      <option value="Курьер">Курьер (Личная встреча)</option>
+      <option value="DHL">DHL (По всей Европе)</option>
+    </select>
+
+   <!-- Способ оплаты -->
+<label for="checkout-payment" class="checkout-label">Оплата:</label>
+<select id="checkout-payment" class="checkout-select" disabled>
+  <option value="">Выберите доставку сначала</option>
+  <option value="Card">Карта</option>
+  <option value="Crypto">Криптовалюта</option>
+  <option value="Cash">Наличные</option>
+</select>
+
+
+    <!-- Кнопки -->
+    <div class="checkout-buttons">
+      <button id="checkout-confirm" class="checkout-btn-confirm">Подтвердить</button>
+      <button id="checkout-cancel" class="checkout-btn-cancel">Отмена</button>
+    </div>
+
+  </div>
+</div>
+
+
+<footer class="cc-footer">
+  <!-- Лого футера -->
+  <div class="cc-footer-logo">
+    <span class="footer-logo-crazy">CRAZY</span>
+    <span class="footer-logo-cloud">CLOUD</span>
+  </div>
+
+  <!-- Внутренние колонки -->
+  <div class="cc-footer-inner">
+    <div class="cc-footer-col">
+      <h4 class="cc-footer-title">ИНФОРМАЦИЯ</h4>
+      <a href="reviews.html">Отзывы</a>
+      <a href="https://t.me/crazycloud_manager target="_blank">Свяжитесь с нами</a>
+      <a href="delivery.html">Доставка и оплата</a>
+    </div>
+
+    <div class="cc-footer-col">
+      <h4 class="cc-footer-title">СЕРВИС</h4>
+     <li><a href="#" id="footer-sale">Акции</a></li>
+<li><a href="#" id="footer-opt">Оптовый запрос</a></li>
+<li><a href="#" id="footer-bonus">Бонусы за лояльность</a></li>
+    </div>
+
+    <div class="cc-footer-col">
+      <h4 class="cc-footer-title">NEWSLETTER</h4>
+      <p class="cc-footer-text newsletter-text">
+  Подпишитесь на нашу рассылку в Telegram, чтобы получать новости о пополнении и новых поставках.
+      </p>
+      <a href="https://t.me/YourBotUsername" target="_blank" class="newsletter-btn">Подписаться</a>
+    </div>
+  </div>
+
+  <!-- Нижняя строка -->
+  <div class="cc-footer-bottom">
+    &copy; 2025 CRAZY CLOUD. Все права защищены.
+  </div>
+</footer>
+
+
+
+
+
+
+
+
+
+
+
+<script src="index.js"></script>
+<!-- toast container -->
+<div id="toast-box"></div>
+
+</body>
+</html>

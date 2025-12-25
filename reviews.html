@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRAZY CLOUD — Отзывы</title>
+
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="review1.PNG">
+<link rel="preload" as="image" href="review2.PNG">
+<link rel="preload" as="image" href="review3.PNG">
+
+<style>
+  .page-title-large {
+  font-family: 'Great Vibes', cursive;
+  font-size: 80px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+
+/* Адаптив */
+@media(max-width:1024px){
+  .page-title-large { font-size: 60px; }
+}
+@media(max-width:768px){
+  .page-title-large { font-size: 40px; }
+}
+@media(max-width:480px){
+  .page-title-large { font-size: 32px; }
+}
+/* ---------------- Variables ---------------- */
+:root{
+  --bg:rgb(18,19,24);
+  --muted: linear-gradient(180deg, rgb(28,29,35) 0%, rgb(23,24,30) 100%);
+  --glass: rgba(255,255,255,0.06);
+  --accent:#bb2178;
+  --text:#ffffff;
+  --trans: 240ms;
+  --safe-bottom: max(env(safe-area-inset-bottom), 24px);
+}
+
+/* ---------------- Reset ---------------- */
+*{box-sizing:border-box;}
+html, body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Arial;-webkit-font-smoothing:antialiased;padding-bottom:120px !important;}
+a{color:inherit;text-decoration:none;}
+button{font-family:inherit;cursor:pointer;border:none;background:none;}
+
+/* ---------------- Header ---------------- */
+header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:36px 22px 20px 22px;
+  position:sticky;
+  top:0;
+  z-index:120;
+  background:var(--bg);
+  border-bottom:1px solid rgba(255,255,255,0.02);
+}
+
+/* ---------------- Logo ---------------- */
+@keyframes neonGlow {
+  0%,100%{color:#ff1e9b;text-shadow:0 0 6px #ff1e9b,0 0 12px #ff1e9b,0 0 20px #ff69c7,0 0 30px rgba(187,33,120,0.6),0 0 40px rgba(187,33,120,0.3);}
+  50%{color:#ff69c7;text-shadow:0 0 10px #ff69c7,0 0 18px #ff1493,0 0 28px rgba(187,33,120,0.6),0 0 36px rgba(187,33,120,0.4),0 0 44px rgba(255,30,155,0.3);}
+}
+@keyframes whiteGlow{
+  0%,100%{text-shadow:0 0 3px rgba(255,255,255,0.4),0 0 6px rgba(255,255,255,0.3),0 0 12px rgba(255,255,255,0.2);}
+  50%{text-shadow:0 0 6px rgba(255,255,255,0.5),0 0 12px rgba(255,255,255,0.35),0 0 20px rgba(255,255,255,0.25);}
+}
+.logo{
+  font-family:'Great Vibes', cursive;
+  display:flex;flex-direction:column;align-items:center;gap:0;
+}
+.logo span:first-child{font-size:32px;color:var(--accent);animation:neonGlow 4s infinite alternate;}
+.logo span:last-child{font-size:28px;color:#fff;margin-top:-5px;animation:whiteGlow 3s infinite alternate;}
+
+/* ---------------- Burger ---------------- */
+.icon-btn{width:42px;height:42px;border-radius:14px;background:linear-gradient(135deg,#121418 0%,#1e1f27 100%);display:flex;justify-content:center;align-items:center;position:relative;transition:all var(--trans);font-size:16px;}
+.icon-btn:active{transform:scale(.98);}
+.burger-lines{display:flex;flex-direction:column;gap:6px;width:28px;height:22px;align-items:center;justify-content:center;}
+.burger-lines span{width:100%;height:3px;background:#fff;border-radius:2px;transition:transform var(--trans,0.3s),opacity var(--trans,0.3s);transform-origin:center;}
+.burger.open .burger-lines span:nth-child(1){transform:translateY(6px) rotate(45deg) scaleX(1.05);}
+.burger.open .burger-lines span:nth-child(2){opacity:0;transform:scaleX(0.4);}
+.burger.open .burger-lines span:nth-child(3){transform:translateY(-6px) rotate(-45deg) scaleX(1.05);}
+
+/* ---------------- Side Menu ---------------- */
+.menu-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;z-index:150;}
+.side-menu{
+  width:340px;
+  padding:24px;
+  position:fixed;
+  top:0;
+  left:0;
+  bottom:0;
+  background: rgba(12,12,12,0.98);
+  transform:translateX(-110%);
+  transition:transform 0.3s ease;
+  z-index:160;
+  border-right:1px solid rgba(255,255,255,0.03);
+  border-radius:0 12px 12px 0;
+  box-shadow:4px 0 20px rgba(0,0,0,0.3);
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  min-height:100vh;
+  gap:36px;
+}
+.side-menu a{display:block;padding:14px 0;color:#fff;font-size:18px;font-weight:400;border-bottom:1px solid rgba(255,255,255,0.03);transition:color 0.25s ease, transform 0.2s ease;}
+.side-menu a:hover{color:#ff1e9b;transform:scale(1.05);}
+.side-menu a.active{color:#ff1e9b;font-weight:600;}
+.side-menu a.active:hover{color:#ff7ac3;}
+.side-menu.open{transform:translateX(0);}
+.side-close-btn{position:absolute;top:18px;right:18px;font-size:28px;color:#fff;background:transparent;border:none;cursor:pointer;transition:color .2s ease, transform .2s ease;}
+.side-close-btn:hover{color:#ff1493;transform:scale(1.1);}
+
+/* ---------------- Main ---------------- */
+.wrap{max-width:1180px;margin:20px auto;padding:0 18px;}
+.page-title{font-size:28px;font-weight:700;margin-bottom:16px;}
+.reviews-list{display:flex;flex-direction:column;gap:20px;}
+.review{background:rgba(255,255,255,0.05);padding:18px;border-radius:14px;}
+.review-text{font-size:18px;margin-bottom:6px;}
+.review-author{font-weight:600;font-size:16px;color:var(--accent);}
+
+
+.reviews-section {
+  max-width: 1180px;
+  margin: 0 auto 60px auto;
+  padding: 0 18px;
+  text-align: center;
+  padding-top: 0px; /* чуть выше */
+}
+
+.reviews-title {
+  font-family: 'Great Vibes', cursive;
+  font-size: 80px; /* чуть меньше на ПК */
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 0px; /* расстояние до фоток */
+}
+
+/* Контейнер отзывов */
+.reviews-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 30px;
+  max-height: none;
+  overflow-y: visible;
+  padding-right: 6px;
+  padding-bottom: 80px; /* добавляем пространство снизу */
+}
+
+
+.review-item {
+  width: 500px;       /* ширина блока */
+  height: auto;       /* высота по содержимому */
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  transition: transform 0.3s;
+}
+
+.review-item img {
+  width: 100%;
+  height: auto;      /* сохраняем пропорции */
+  object-fit: contain; /* теперь фото не обрезается */
+  display: block;
+}
+
+.review-item:hover {
+  transform: scale(1.05);
+}
+
+/* Адаптив */
+@media(max-width: 1024px){
+  .review-item { width: 700px; height: 1167px; }
+  .reviews-title { font-size: 60px; }
+}
+@media(max-width:768px){
+  .review-item { width: 480px; height: 800px; }
+  .reviews-title { font-size: 40px; }
+}
+@media(max-width:480px){
+  .review-item { width: 280px; height: 467px; }
+  .reviews-title { font-size: 32px; }
+}
+
+/* ====================== FOOTER STYLES ====================== */
+.cc-footer {
+  background: var(--bg);
+  color: var(--text);
+  padding: 60px 20px 20px;
+  font-family: 'Inter', system-ui, Arial, sans-serif;
+  border-top: 1px solid rgba(255,255,255,0.03);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+}
+
+/* Футерное лого */
+.cc-footer-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.footer-logo-crazy {
+  font-family: 'Great Vibes', cursive;
+  font-size: 36px;
+  color: #ff1e9b;
+  animation: neonGlow 4s infinite alternate;
+}
+
+.footer-logo-cloud {
+  font-family: 'Great Vibes', cursive;
+  font-size: 32px;
+  color: #fff;
+  margin-top: -5px;
+  animation: whiteGlow 3s infinite alternate;
+}
+
+/* ===== ВЫРОВНЕННЫЕ КОЛОНКИ ===== */
+.cc-footer-inner {
+  display: flex;
+  justify-content: center;     /* <-- главное выравнивание */
+  max-width: 1100px;
+  width: 100%;
+  gap: 70px;                    /* одинаковый промежуток между всеми */
+  flex-wrap: wrap;
+  text-align: center;           /* центровка контента */
+}
+
+/* Колонки — фикс ширина, чтобы не растягивались */
+.cc-footer-col {
+  width: 250px;                 /* <-- одинаковая ширина */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px;
+}
+
+/* Заголовки */
+.cc-footer-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+
+/* Текст */
+.cc-footer-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #aaa;
+  margin-bottom: 12px;
+}
+
+/* Ссылки */
+.cc-footer-col a {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 15px;
+  color: #ccc;
+  transition: color var(--trans);
+}
+
+.cc-footer-col a:hover {
+  color: var(--accent);
+}
+
+/* Newsletter button */
+.newsletter-btn {
+  padding: 12px 18px;
+  background: var(--accent);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--trans);
+}
+
+.newsletter-btn:hover {
+  background: #ff478a;
+  transform: translateY(-2px);
+}
+
+/* Нижняя строка */
+.cc-footer-bottom {
+  text-align: center;
+  font-size: 13px;
+  color: #666;
+  padding: 20px 0 10px;
+  border-top: 1px solid rgba(255,255,255,0.03);
+  width: 100%;
+  margin-top: 10px;
+}
+
+/* ====================== Responsive ====================== */
+@media(max-width: 820px){
+  .cc-footer-inner {
+    flex-direction: column;
+    gap: 35px;
+  }
+
+  .cc-footer-col {
+    width: 100%;
+  }
+}
+
+/* Newsletter button */
+.newsletter-btn {
+  padding: 12px 18px;
+  background: var(--accent);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--trans);
+}
+
+.newsletter-btn:hover {
+  background: #ff478a;
+  transform: translateY(-2px);
+}
+
+/* Нижняя строка */
+.cc-footer-bottom {
+  text-align: center;
+  font-size: 13px;
+  color: #666;
+  padding: 20px 0 10px;
+  border-top: 1px solid rgba(255,255,255,0.03);
+  width: 100%;
+  margin-top: 20px;
+}
+
+/* Подсветка логотипа футера */
+@keyframes neonGlow {
+  0%, 100% {
+    color: #ff1e9b;
+    text-shadow:
+      0 0 6px #ff1e9b,
+      0 0 12px #ff1e9b,
+      0 0 20px #ff69c7,
+      0 0 30px rgba(187,33,120,0.6),
+      0 0 40px rgba(187,33,120,0.3);
+  }
+  50% {
+    color: #ff69c7;
+    text-shadow:
+      0 0 10px #ff69c7,
+      0 0 18px #ff1493,
+      0 0 28px rgba(187,33,120,0.6),
+      0 0 36px rgba(187,33,120,0.4),
+      0 0 44px rgba(255,30,155,0.3);
+  }
+}
+
+@keyframes whiteGlow {
+  0%, 100% {
+    text-shadow:
+      0 0 3px rgba(255,255,255,0.4),
+      0 0 6px rgba(255,255,255,0.3),
+      0 0 12px rgba(255,255,255,0.2);
+  }
+  50% {
+    text-shadow:
+      0 0 6px rgba(255,255,255,0.5),
+      0 0 12px rgba(255,255,255,0.35),
+      0 0 20px rgba(255,255,255,0.25);
+  }
+}
+
+/* ====================== Responsive ====================== */
+@media(max-width: 820px){
+  .cc-footer-inner {
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .cc-footer-col {
+    flex: 1 1 100%;
+  }
+
+  .cc-footer-text,
+  .cc-footer-col a,
+  .cc-footer-title {
+    text-align: center;
+  }
+}
+
+.coming-soon-popup {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(0,0,0,0.85);
+  padding: 12px 22px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 15px;
+  opacity: 0;
+  pointer-events: none;
+  transition: .28s ease;
+  backdrop-filter: blur(6px);
+  z-index: 9999;
+}
+
+.coming-soon-popup.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Поднимаем только текст Newsletter */
+.cc-footer-col .cc-footer-text.newsletter-text {
+  margin-top: -2px;   /* поднимаем текст */
+  margin-bottom: 18px; /* расстояние до кнопки */
+}
+
+.coming-soon-popup {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(0,0,0,0.85);
+  padding: 12px 22px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 15px;
+  opacity: 0;
+  pointer-events: none;
+  transition: .28s ease;
+  backdrop-filter: blur(6px);
+  z-index: 9999;
+}
+
+.coming-soon-popup.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+
+</style>
+</head>
+<body>
+
+<header>
+  <button class="icon-btn burger" id="burger">
+    <span class="burger-lines"><span></span><span></span><span></span></span>
+  </button>
+  <div class="logo"><span>CRAZY</span><span>CLOUD</span></div>
+  <div style="width:42px; visibility:hidden;"></div>
+</header>
+
+<!-- Side Menu -->
+<div id="menu-backdrop" class="menu-backdrop">
+  <nav id="side-menu" class="side-menu">
+    <button id="side-menu-close" class="side-close-btn">✕</button>
+    <a href="index.html">Главная</a>
+    <a href="reviews.html" class="active">Отзывы</a>
+    <a href="delivery.html">Доставка и оплата</a>
+    <a href="https://t.me/crazycloud_manager" target="_blank" rel="noopener">Написать менеджеру</a>
+  </nav>
+</div>
+
+
+  <section class="reviews-section">
+<h2 class="page-title-large">Отзывы</h2>
+
+  <div class="reviews-container" id="reviews-container">
+    <!-- Добавьте ваши фотографии сюда -->
+    <div class="review-item"><img src="review1.PNG" alt="Отзыв 1" loading="lazy"></div>
+    <div class="review-item"><img src="review2.PNG" alt="Отзыв 2"  loading="lazy"></div>
+    <div class="review-item"><img src="review3.PNG" alt="Отзыв 3" loading="lazy"></div>
+    <div class="review-item"><img src="review4.PNG" alt="Отзыв 4" loading="lazy"></div>
+    <div class="review-item"><img src="review5.PNG" alt="Отзыв 5" loading="lazy"></div>
+    <div class="review-item"><img src="review6.PNG" alt="Отзыв 6" loading="lazy"></div>
+    <div class="review-item"><img src="review7.PNG" alt="Отзыв 7" loading="lazy"></div>
+    <div class="review-item"><img src="review8.PNG" alt="Отзыв 8" loading="lazy"></div>
+    <div class="review-item"><img src="review9.PNG" alt="Отзыв 9" loading="lazy"></div>
+    <div class="review-item"><img src="review10.PNG" alt="Отзыв 10" loading="lazy"></div>
+    <div class="review-item"><img src="review11.PNG" alt="Отзыв 11" loading="lazy"></div>
+  </div>
+</section>
+
+
+<footer class="cc-footer">
+  <!-- Лого футера -->
+  <div class="cc-footer-logo">
+    <span class="footer-logo-crazy">CRAZY</span>
+    <span class="footer-logo-cloud">CLOUD</span>
+  </div>
+
+  <!-- Внутренние колонки -->
+  <div class="cc-footer-inner">
+    <div class="cc-footer-col">
+      <h4 class="cc-footer-title">ИНФОРМАЦИЯ</h4>
+      <a href="reviews.html">Отзывы</a>
+      <a href="https://t.me/crazycloud_manager"_blank">Свяжитесь с нами</a>
+      <a href="delivery.html">Доставка и оплата</a>
+    </div>
+
+    <div class="cc-footer-col">
+      <h4 class="cc-footer-title">СЕРВИС</h4>
+     <li><a href="#" id="footer-sale">Акции</a></li>
+<li><a href="#" id="footer-opt">Оптовый запрос</a></li>
+<li><a href="#" id="footer-bonus">Бонусы за лояльность</a></li>
+    </div>
+
+    <div class="cc-footer-col">
+      <h4 class="cc-footer-title">NEWSLETTER</h4>
+      <p class="cc-footer-text newsletter-text">
+  Подпишитесь на нашу рассылку в Telegram, чтобы получать новости о пополнении и новых поставках.
+      </p>
+      <a href="https://t.me/crazydecloud_bot" target="_blank" class="newsletter-btn">Подписаться</a>
+    </div>
+  </div>
+
+  <!-- Нижняя строка -->
+  <div class="cc-footer-bottom">
+    &copy; 2025 CRAZY CLOUD. Все права защищены.
+  </div>
+</footer>
+
+<script>
+   const reviews = document.querySelectorAll('.review-item');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if(entry.isIntersecting){
+        entry.target.style.transform = 'translateY(0)';
+        entry.target.style.opacity = '1';
+      }
+    });
+  }, { threshold: 0.1 });
+
+  reviews.forEach(item => {
+    item.style.transform = 'translateY(20px)';
+    item.style.opacity = '0';
+    item.style.transition = 'all 0.6s ease';
+    observer.observe(item);
+  });
+// Burger menu toggle
+const burger = document.getElementById('burger');
+const menuBackdrop = document.getElementById('menu-backdrop');
+const sideMenu = document.getElementById('side-menu');
+const sideMenuClose = document.getElementById('side-menu-close');
+
+burger.addEventListener('click', () => {
+  burger.classList.toggle('open');
+  sideMenu.classList.toggle('open');
+  menuBackdrop.style.display = sideMenu.classList.contains('open') ? 'block' : 'none';
+});
+
+sideMenuClose.addEventListener('click', () => {
+  burger.classList.remove('open');
+  sideMenu.classList.remove('open');
+  menuBackdrop.style.display = 'none';
+});
+
+menuBackdrop.addEventListener('click', (e) => {
+  if(e.target === menuBackdrop){
+    burger.classList.remove('open');
+    sideMenu.classList.remove('open');
+    menuBackdrop.style.display = 'none';
+  }
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const comingSoonLinks = [
+    "footer-sale",
+    "footer-opt",
+    "footer-bonus"
+  ];
+
+  comingSoonLinks.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      showComingSoon();
+    });
+  });
+});
+
+function showComingSoon() {
+  let box = document.getElementById("coming-soon-box");
+
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "coming-soon-box";
+    box.className = "coming-soon-popup";
+    box.innerText = "Раздел в разработке 👨‍💻";
+    document.body.appendChild(box);
+
+    setTimeout(() => box.classList.add("show"), 10);
+
+    setTimeout(() => {
+      box.classList.remove("show");
+      setTimeout(() => box.remove(), 300);
+    }, 2000);
+  }
+}
+</script>
+
+</body>
+</html>

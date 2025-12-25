@@ -28,8 +28,9 @@ const waitingReview = new Map();
 
 
 // ================= SQLite =================
-const dbPath = path.join(process.env.HOME || process.env.USERPROFILE, "Desktop", "html2", "database.sqlite");
+const dbPath = path.join(__dirname, "database.sqlite");
 const db = new Database(dbPath);
+
 
 console.log("Запуск бота и сервера");
 console.log(" Telegram token:", TOKEN ? "OK" : " отсутствует");

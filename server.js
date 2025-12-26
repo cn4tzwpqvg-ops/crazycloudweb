@@ -127,6 +127,14 @@ console.log("Текущие клиенты и chat_id:", db.prepare("SELECT user
 // ================= Telegram Bot =================
 const bot = new TelegramBot(TOKEN, { polling: true });
 
+// отключаем вебхуки — иначе polling может падать после рестартов
+bot.deleteWebHook().catch(() => {});
+
+bot.on("polling_error", (err) => {
+  console.error("Polling error:", err);
+});
+
+
 // ================= Курьеры =================
 // ================= Курьеры =================
 function getCouriers() {

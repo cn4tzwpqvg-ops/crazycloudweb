@@ -372,12 +372,13 @@ async function askForReview(order) {
   }
 
   // 2️⃣ Добавляем заказ в waitingReview
-  waitingReview.set(order.client_chat_id, {
-    orderId: order.id,
-    courier: order.courier_username,
-    client: order.tgNick,
-    rating: null
-  });
+waitingReview.set(order.client_chat_id, {
+  orderId: order.id,
+  courier: order.courier_username,
+  client: order.tgNick.replace(/^@/, ""), // убираем @ если есть
+  rating: null
+});
+
 
   console.log(
     "waitingReview SET",

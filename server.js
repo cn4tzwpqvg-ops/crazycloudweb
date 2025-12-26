@@ -971,29 +971,42 @@ if (text === "Курьеры" && id === ADMIN_ID) {
   }
 
   // ===== Мои заказы =====
+// ===== Мои заказы =====
 if (text === "Мои заказы") {
   const orders = db
-    .prepare("SELECT * FROM orders WHERE client_chat_id=? ORDER BY created_at DESC LIMIT 10")
-    .all(id); // используем chat_id, а не username
+    .prepare("SELECT * FROM orders WHERE tgNick=? ORDER BY created_at DESC LIMIT 10")
+    .all(username);
 
   if (!orders.length) {
     return bot.sendMessage(id, "У вас пока нет заказов.");
   }
 
+  // Разделяем на активные и выполненные
   const activeOrders = orders.filter(o => o.status === "new" || o.status === "taken");
   const doneOrders = orders.filter(o => o.status === "delivered");
 
   let msg = "";
   if (activeOrders.length) {
     msg += "*Активные заказы:*\n";
-    msg += activeOrders.map(o => `#${o.id} — статус: ${o.status}`).join("\n") + "\n\n";
+    msg += activeOrders
+      .map(o => `#${o.id} — статус: ${escapeMarkdownV2(o.status)}`)
+      .join("\n") + "\n\n";
   }
   if (doneOrders.length) {
     msg += "*Выполненные заказы:*\n";
-    msg += doneOrders.map(o => `#${o.id} — создан: ${o.created_at || "—"}`).join("\n");
+    msg += doneOrders
+      .map(o => `#${o.id} — создан: ${escapeMarkdownV2(o.created_at || "—")}`)
+      .join("\n");
   }
 
-  return bot.sendMessage(id, msg, { parse_mode: "MarkdownV2" });
+  if (!msg) msg = "У вас пока нет заказов.";
+
+  try {
+    return bot.sendMessage(id, msg, { parse_mode: "MarkdownV2" });
+  } catch (err) {
+    console.error("Ошибка отправки Мои заказы:", err.message);
+    return bot.sendMessage(id, "Произошла ошибка при показе заказов.");
+  }
 }
 
 

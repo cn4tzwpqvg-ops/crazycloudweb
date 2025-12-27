@@ -986,7 +986,7 @@ if (text === "Курьеры" && id === ADMIN_ID) {
     return bot.sendMessage(id, "Свяжитесь с поддержкой через @crazycloud_manager.");
   }
 
-давай теперь перепиши эти блоки вот код менюшки  // ===== Менюшка =====
+ // ===== Менюшка =====
 if (text === "Мои заказы") {
   return bot.sendMessage(id, "Что показать?", {
     reply_markup: {
@@ -1001,7 +1001,7 @@ if (text === "Мои заказы") {
 }
 
   if (text === "Назад") {
-  return bot.sendMessage(id, "Главное меню", {
+  return bot.sendMessage(id, "Главное меню", {  
     reply_markup: {
       keyboard: [
         [{ text: "Личный кабинет" }, { text: "Поддержка" }, { text: "Мои заказы" }]

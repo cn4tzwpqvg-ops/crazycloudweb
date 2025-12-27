@@ -953,22 +953,42 @@ if (text === "Курьеры" && id === ADMIN_ID) {
  addOrUpdateClient(username, first_name, id);
   const client = getClient(username);
 
-  // ===== Главное меню =====
-  if (text === "Назад") {
-    if (id === ADMIN_ID) {
-      return bot.sendMessage(id, "Главное меню админа", {
-        reply_markup: { keyboard: [[{ text: "Панель администратора" }, { text: "Панель курьера" }]], resize_keyboard: true }
-      });
-    }
-    if (COURIERS[username]) {
-  return bot.sendMessage(id, "Главное меню курьера", {
-    reply_markup: { keyboard: [[{ text: "Панель курьера" }]], resize_keyboard: true }
-  });
-}
-    return bot.sendMessage(id, "Главное меню", {
-      reply_markup: { keyboard: [[{ text: "Личный кабинет" }, { text: "Поддержка" }]], resize_keyboard: true }
+ // ===== Главное меню =====
+if (text === "Назад") {
+  if (id === ADMIN_ID) {
+    return bot.sendMessage(id, "Главное меню админа", {
+      reply_markup: {
+        keyboard: [
+          [{ text: "Панель администратора" }, { text: "Панель курьера" }]
+        ],
+        resize_keyboard: true
+      }
     });
   }
+
+  if (COURIERS[username]) {
+    return bot.sendMessage(id, "Главное меню курьера", {
+      reply_markup: {
+        keyboard: [
+          [{ text: "Панель курьера" }]
+        ],
+        resize_keyboard: true
+      }
+    });
+  }
+
+  // Главное меню для обычного пользователя
+  return bot.sendMessage(id, "Главное меню", {
+    reply_markup: {
+      keyboard: [
+        [{ text: "Личный кабинет" }, { text: "Поддержка" }],
+        [{ text: "Мои заказы" }]
+      ],
+      resize_keyboard: true
+    }
+  });
+}
+
 
   // ===== Личный кабинет =====
   if (text === "Личный кабинет") {

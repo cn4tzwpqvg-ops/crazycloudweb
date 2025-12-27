@@ -127,12 +127,53 @@ console.log("Текущие клиенты и chat_id:", db.prepare("SELECT user
 // ================= Telegram Bot =================
 const bot = new TelegramBot(TOKEN, { polling: true });
 
+// Восстанавливаем заказы после перезапуска
+restoreOrdersForClients();
+restoreOrdersForCouriers();
+
+
 // отключаем вебхуки — иначе polling может падать после рестартов
 bot.deleteWebHook().catch(() => {});
 
 bot.on("polling_error", (err) => {
   console.error("Polling error:", err);
 });
+
+
+// ===== Восстановление заказов для обычных пользователей =====
+async function restoreOrdersForClients() {
+  const clients = db.prepare("SELECT username, chat_id FROM clients WHERE chat_id IS NOT NULL").all();
+  
+  for (const client of clients) {
+    const orders = db.prepare(`
+      SELECT *
+      FROM orders
+      WHERE REPLACE(tgNick,'@','') = ?
+      AND status IN ('new','taken')
+      ORDER BY created_at DESC
+    `).all(client.username);
+
+    for (const order of orders) {
+      try {
+        await bot.sendMessage(client.chat_id, buildOrderMessage(order), {
+          parse_mode: "MarkdownV2"
+        });
+      } catch (err) {
+        console.error(`Ошибка восстановления заказа №${order.id} для @${client.username}:`, err.message);
+      }
+    }
+  }
+  console.log("Восстановление заказов для клиентов завершено");
+}
+
+// ===== Восстановление заказов для курьеров и админа =====
+function restoreOrdersForCouriers() {
+  const orders = db.prepare("SELECT * FROM orders WHERE status IN ('new','taken')").all();
+  orders.forEach(async (order) => {
+    await sendOrUpdateOrder(order);
+  });
+  console.log("Восстановление заказов для курьеров завершено");
+}
 
 
 

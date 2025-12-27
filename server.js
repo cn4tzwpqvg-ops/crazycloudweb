@@ -7,7 +7,8 @@ const cors = require("cors");
 const http = require("http");
 const WebSocket = require("ws");
 const TelegramBot = require("node-telegram-bot-api");
-const Database = require("better-sqlite3");
+// const Database = require("better-sqlite3");
+const mysql = require("mysql2/promise");
 
 // ================= Настройки =================
 const TOKEN = process.env.TELEGRAM_TOKEN;
@@ -23,105 +24,99 @@ const waitingReview = new Map();
 // chat_id => { orderId, courier, client }
 
 
+// ================= MySQL =================
+(async () => {
+  try {
+    db = await mysql.createConnection(process.env.MYSQL_URL);
+    console.log("MySQL connected");
 
+    console.log("Запуск бота и сервера");
+    console.log(" Telegram token:", TOKEN ? "OK" : " отсутствует");
+    console.log(" Сервер будет слушать:", `http://${HOST}:${PORT}`);
+    console.log(" Подключение к MySQL:", process.env.MYSQL_URL ? "OK" : "нет");
 
+    // ===== Создание таблиц =====
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS clients (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(255) UNIQUE,
+        first_name VARCHAR(255),
+        chat_id BIGINT,
+        subscribed TINYINT DEFAULT 1,
+        city VARCHAR(255),
+        created_at DATETIME,
+        last_active DATETIME
+      )
+    `);
+    console.log("Таблица clients готова");
 
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id VARCHAR(255) PRIMARY KEY,
+        tgNick VARCHAR(255),
+        city VARCHAR(255),
+        delivery VARCHAR(255),
+        payment VARCHAR(255),
+        orderText TEXT,
+        date DATE,
+        time TIME,
+        status VARCHAR(50) DEFAULT 'new',
+        courier_username VARCHAR(255),
+        taken_at DATETIME,
+        delivered_at DATETIME,
+        created_at DATETIME,
+        client_chat_id BIGINT
+      )
+    `);
+    console.log("Таблица orders готова");
 
-// ================= SQLite =================
-const dbPath = path.join(__dirname, "database.sqlite");
-const db = new Database(dbPath);
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS couriers (
+        username VARCHAR(255) PRIMARY KEY,
+        chat_id BIGINT
+      )
+    `);
+    console.log("Таблица couriers готова");
 
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS order_messages (
+        order_id VARCHAR(255),
+        chat_id BIGINT,
+        message_id BIGINT,
+        PRIMARY KEY (order_id, chat_id)
+      )
+    `);
+    console.log("Таблица order_messages готова");
 
-console.log("Запуск бота и сервера1");
-console.log(" Telegram token:",TOKEN ? "OK" : " отсутствует");
-console.log(" Сервер будет слушать:", `http://${HOST}:${PORT}`);
-console.log(" База данных SQLite:",dbPath);
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS reviews (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        order_id VARCHAR(255),
+        client_username VARCHAR(255),
+        courier_username VARCHAR(255),
+        rating INT,
+        review_text TEXT,
+        created_at DATETIME
+      )
+    `);
+    console.log("Таблица reviews с рейтингом готова");
 
-// ===== Создание таблиц =====
-db.prepare(`
-CREATE TABLE IF NOT EXISTS clients (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE,
-  first_name TEXT,
-  chat_id INTEGER,
-  subscribed INTEGER DEFAULT 1,
-  city TEXT,
-  created_at TEXT,
-  last_active TEXT
-)
-`).run();
-console.log("Таблица clients готова");
-db.prepare(`
-CREATE TABLE IF NOT EXISTS orders (
-  id TEXT PRIMARY KEY,
-  tgNick TEXT,
-  city TEXT,
-  delivery TEXT,
-  payment TEXT,
-  orderText TEXT,
-  date TEXT,
-  time TEXT,
-  status TEXT DEFAULT 'new',
-  courier_username TEXT,
-  taken_at TEXT,
-  delivered_at TEXT,
-  created_at TEXT
-)
-`).run();
-console.log("Таблица orders готова");
-// ===== добавляем client_chat_id (если ещё нет) =====
-try {
-  db.prepare(`ALTER TABLE orders ADD COLUMN client_chat_id INTEGER`).run();
-  console.log(" client_chat_id добавлен в orders");
-} catch (e) {
-  console.log(" client_chat_id уже существует");
-}
+    // ===== Индексы =====
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)`);
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_orders_courier ON orders(courier_username)`);
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_clients_username ON clients(username)`);
 
-db.prepare(`
-CREATE TABLE IF NOT EXISTS couriers (
-  username TEXT PRIMARY KEY,
-  chat_id INTEGER
-)
-`).run();
-console.log("Таблица couriers готова");
-db.prepare(`
-CREATE TABLE IF NOT EXISTS order_messages (
-  order_id TEXT,
-  chat_id INTEGER,
-  message_id INTEGER,
-  PRIMARY KEY (order_id, chat_id)
-)
-`).run();
+    // ===== Вывод текущих данных =====
+    const [couriers] = await db.execute("SELECT username, chat_id FROM couriers");
+    console.log("Текущие курьеры и chat_id:", couriers);
 
-db.prepare(`
-CREATE TABLE IF NOT EXISTS reviews (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  order_id TEXT,
-  client_username TEXT,
-  courier_username TEXT,
-  rating INTEGER,
-  review_text TEXT,
-  created_at TEXT
-)
-`).run();
-console.log("Таблица reviews с рейтингом готова");
+    const [clients] = await db.execute("SELECT username, chat_id FROM clients");
+    console.log("Текущие клиенты и chat_id:", clients);
 
-
-
-// ===== Добавляем индексы для ускорения поиска =====
-db.prepare("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)").run();
-db.prepare("CREATE INDEX IF NOT EXISTS idx_orders_courier ON orders(courier_username)").run();
-db.prepare("CREATE INDEX IF NOT EXISTS idx_clients_username ON clients(username)").run();
-
-
-
-
-console.log(" Таблица order_messages готова");
-// Выводим текущие данные для проверки
-console.log("Текущие курьеры и chat_id:", db.prepare("SELECT username, chat_id FROM couriers").all());
-console.log("Текущие клиенты и chat_id:", db.prepare("SELECT username, chat_id FROM clients").all());
-
-
+  } catch (err) {
+    console.error("Ошибка MySQL:", err);
+  }
+})();
 
 
 // ================= Telegram Bot =================
@@ -1046,22 +1041,21 @@ if (text === "Назад") {
   if (text === "Поддержка") {
     return bot.sendMessage(id, "Свяжитесь с поддержкой через @crazycloud_manager.");
   }
-
- // ===== Менюшка =====
+// ===== Менюшка =====
 if (text === "Мои заказы") {
   return bot.sendMessage(id, "Что показать?", {
     reply_markup: {
       keyboard: [
         [{ text: "Активные заказы" }],
         [{ text: "Выполненные заказы" }],
-        [{ text: "Назад" }] // ← добавляем кнопку назад
+        [{ text: "Назад" }]
       ],
       resize_keyboard: true
     }
   });
 }
 
-  if (text === "Назад") {
+if (text === "Назад") {
   return bot.sendMessage(id, "Главное меню", {  
     reply_markup: {
       keyboard: [
@@ -1072,14 +1066,17 @@ if (text === "Мои заказы") {
   });
 }
 
+//
+// ---------- АКТИВНЫЕ ЗАКАЗЫ --------------
+//
 if (text === "Активные заказы") {
-  const orders = getUserOrders(username);
 
-  const active = orders.filter(
-    o => o.status === "new" || o.status === "taken"
+  const [orders] = await db.query(
+    "SELECT * FROM orders WHERE client_chat_id = ? AND status != 'delivered' ORDER BY created_at DESC",
+    [id]
   );
 
-  if (!active.length) {
+  if (!orders.length) {
     return bot.sendMessage(id, "Активных заказов пока нет 🙂", {
       reply_markup: {
         keyboard: [
@@ -1092,8 +1089,8 @@ if (text === "Активные заказы") {
     });
   }
 
-  const msg = active
-    .map(o => `#${o.id} — статус: ${o.status}\n${o.orderText}`)
+  const msg = orders
+    .map(o => `#${o.id} — статус: ${o.status}\n${o.orderText || "—"}`)
     .join("\n\n");
 
   return bot.sendMessage(id, msg, {
@@ -1108,12 +1105,17 @@ if (text === "Активные заказы") {
   });
 }
 
+//
+// ---------- ВЫПОЛНЕННЫЕ ЗАКАЗЫ --------------
+//
 if (text === "Выполненные заказы") {
-  const orders = getUserOrders(username);
 
-  const done = orders.filter(o => o.status === "delivered");
+  const [orders] = await db.query(
+    "SELECT * FROM orders WHERE client_chat_id = ? AND status = 'delivered' ORDER BY delivered_at DESC",
+    [id]
+  );
 
-  if (!done.length) {
+  if (!orders.length) {
     return bot.sendMessage(id, "Выполненных заказов пока нет.", {
       reply_markup: {
         keyboard: [
@@ -1126,14 +1128,12 @@ if (text === "Выполненные заказы") {
     });
   }
 
-  const msg = done
+  const msg = orders
     .map(o => {
-      const deliveredAt = o.delivered_at ? new Date(o.delivered_at) : new Date(o.created_at);
-      const dateStr = deliveredAt.toLocaleDateString("ru-RU");
-      const timeStr = deliveredAt.toLocaleTimeString("ru-RU");
-      const textOrder = o.orderText ? o.orderText : "—";
+      const deliveredAt = o.delivered_at || o.created_at;
+      const d = new Date(deliveredAt);
 
-      return `#${o.id} — доставлен: ${dateStr}, ${timeStr}\n${textOrder}`;
+      return `#${o.id} — доставлен: ${d.toLocaleDateString("ru-RU")} ${d.toLocaleTimeString("ru-RU")}\n${o.orderText || "—"}`;
     })
     .join("\n\n");
 

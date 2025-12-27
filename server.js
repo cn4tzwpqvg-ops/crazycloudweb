@@ -985,8 +985,22 @@ if (text === "Курьеры" && id === ADMIN_ID) {
   if (text === "Поддержка") {
     return bot.sendMessage(id, "Свяжитесь с поддержкой через @crazycloud_manager.");
   }
-// Главное меню
-if (text === "Назад") {
+
+   // ===== Менюшка =====
+if (text === "Мои заказы") {
+  return bot.sendMessage(id, "Что показать?", {
+    reply_markup: {
+      keyboard: [
+        [{ text: "Активные заказы" }],
+        [{ text: "Выполненные заказы" }],
+        [{ text: "Назад" }] // ← добавляем кнопку назад
+      ],
+      resize_keyboard: true
+    }
+  });
+}
+
+  if (text === "Назад") {
   return bot.sendMessage(id, "Главное меню", {
     reply_markup: {
       keyboard: [
@@ -997,28 +1011,29 @@ if (text === "Назад") {
   });
 }
 
-// Меню "Мои заказы"
-if (text === "Мои заказы") {
-  return bot.sendMessage(id, "Что показать?", {
-    reply_markup: {
-      keyboard: [
-        [{ text: "Активные заказы" }],
-        [{ text: "Выполненные заказы" }],
-        [{ text: "Назад" }]
-      ],
-      resize_keyboard: true
-    }
-  });
-}
-
-// Активные заказы
 if (text === "Активные заказы") {
   const orders = getUserOrders(username);
-  const active = orders.filter(o => o.status === "new" || o.status === "taken");
 
-  const msg = active.length
-    ? active.map(o => `#${o.id} — статус: ${o.status}\n${o.orderText}`).join("\n\n")
-    : "Активных заказов пока нет 🙂";
+  const active = orders.filter(
+    o => o.status === "new" || o.status === "taken"
+  );
+
+  if (!active.length) {
+    return bot.sendMessage(id, "Активных заказов пока нет 🙂", {
+      reply_markup: {
+        keyboard: [
+          [{ text: "Активные заказы" }],
+          [{ text: "Выполненные заказы" }],
+          [{ text: "Назад" }]
+        ],
+        resize_keyboard: true
+      }
+    });
+  }
+
+  const msg = active
+    .map(o => `#${o.id} — статус: ${o.status}\n${o.orderText}`)
+    .join("\n\n");
 
   return bot.sendMessage(id, msg, {
     reply_markup: {
@@ -1032,19 +1047,34 @@ if (text === "Активные заказы") {
   });
 }
 
-// Выполненные заказы
 if (text === "Выполненные заказы") {
   const orders = getUserOrders(username);
+
   const done = orders.filter(o => o.status === "delivered");
 
-  const msg = done.length
-    ? done.map(o => {
-        const deliveredAt = o.delivered_at ? new Date(o.delivered_at) : new Date(o.created_at);
-        const dateStr = deliveredAt.toLocaleDateString("ru-RU");
-        const timeStr = deliveredAt.toLocaleTimeString("ru-RU");
-        return `#${o.id} — доставлен: ${dateStr}, ${timeStr}\n${o.orderText || "—"}`;
-      }).join("\n\n")
-    : "Выполненных заказов пока нет.";
+  if (!done.length) {
+    return bot.sendMessage(id, "Выполненных заказов пока нет.", {
+      reply_markup: {
+        keyboard: [
+          [{ text: "Активные заказы" }],
+          [{ text: "Выполненные заказы" }],
+          [{ text: "Назад" }]
+        ],
+        resize_keyboard: true
+      }
+    });
+  }
+
+  const msg = done
+    .map(o => {
+      const deliveredAt = o.delivered_at ? new Date(o.delivered_at) : new Date(o.created_at);
+      const dateStr = deliveredAt.toLocaleDateString("ru-RU");
+      const timeStr = deliveredAt.toLocaleTimeString("ru-RU");
+      const textOrder = o.orderText ? o.orderText : "—";
+
+      return `#${o.id} — доставлен: ${dateStr}, ${timeStr}\n${textOrder}`;
+    })
+    .join("\n\n");
 
   return bot.sendMessage(id, msg, {
     reply_markup: {
@@ -1057,8 +1087,6 @@ if (text === "Выполненные заказы") {
     }
   });
 }
-
-
 
 
 

@@ -998,20 +998,19 @@ if (text === "Курьеры" && id === ADMIN_ID) {
   });
 }
 
-  if (text === "Выполненные заказы") {
+if (text === "Активные заказы") {
   const orders = getUserOrders(username);
 
-  const done = orders.filter(o => o.status === "delivered");
+  const active = orders.filter(
+    o => o.status === "new" || o.status === "taken"
+  );
 
-  if (!done.length) {
-    return bot.sendMessage(id, "Выполненных заказов пока нет.");
+  if (!active.length) {
+    return bot.sendMessage(id, "Активных заказов пока нет 🙂");
   }
 
-  const msg = done
-    .map(o => {
-      const when = o.delivered_at || o.created_at;
-      return `#${o.id} — доставлен: ${new Date(when).toLocaleString("ru-RU")}\n${o.orderText}`;
-    })
+  const msg = active
+    .map(o => `#${o.id} — статус: ${o.status}\n${o.orderText}`)
     .join("\n\n");
 
   return bot.sendMessage(id, msg);

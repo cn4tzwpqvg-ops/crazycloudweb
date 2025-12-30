@@ -607,46 +607,49 @@ checkoutConfirm.addEventListener("click", async () => {
     initData: window.Telegram?.WebApp?.initData || null
   };
 
-  try {
-    const res = await fetch("https://bot5-bot5-test.up.railway.app/api/send-order", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(orderData)
-});
+try {
+  const API_URL = "https://bot1-production-376a.up.railway.app/api/send-order";
 
+  // Добавляем client_chat_id для теста
+  const orderDataWithId = { ...orderData, client_chat_id: null };
 
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(orderDataWithId)
+  });
 
-    const json = await res.json();
+  const json = await res.json();
 
-    if (json.success) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showPopup({
-          title: "Заказ принят ✅",
-          message: `Спасибо! Менеджер свяжется с вами.\n\nВаш Telegram: ${tgNick}`,
-          buttons: [{ id: "ok", type: "default", text: "ОК" }]
-        });
+  if (json.success) {
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showPopup({
+        title: "Заказ принят ✅",
+        message: `Спасибо! Менеджер свяжется с вами.\n\nВаш Telegram: ${tgNick}`,
+        buttons: [{ id: "ok", type: "default", text: "ОК" }]
+      });
 
-        window.Telegram.WebApp.onEvent("popupClosed", () => {
-          cart = [];
-          updateCart();
-          updateCheckoutButton();
-          closeCheckout();
-          window.Telegram.WebApp.close();
-        });
-      } else {
-        alert(`Спасибо! С вами свяжется менеджер.\nВаш Telegram: ${tgNick}`);
+      window.Telegram.WebApp.onEvent("popupClosed", () => {
         cart = [];
         updateCart();
         updateCheckoutButton();
         closeCheckout();
-      }
+        window.Telegram.WebApp.close();
+      });
     } else {
-      alert("Не удалось отправить заказ. Попробуйте позже.");
+      alert(`Спасибо! С вами свяжется менеджер.\nВаш Telegram: ${tgNick}`);
+      cart = [];
+      updateCart();
+      updateCheckoutButton();
+      closeCheckout();
     }
-  } catch (err) {
-    console.error(err);
-    alert("Ошибка сети. Проверьте соединение и попробуйте снова.");
+  } else {
+    alert("Не удалось отправить заказ. Попробуйте позже.");
   }
+} catch (err) {
+  console.error(err);
+  alert("Ошибка сети. Проверьте соединение и попробуйте снова.");
+}
 });
 
 

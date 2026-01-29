@@ -102,15 +102,28 @@ categories.forEach(cat => {
   el.textContent = cat.label;
   el.dataset.id = cat.id;
 
-  el.addEventListener("pointerup", (e) => {
+  el.addEventListener("pointerup", async (e) => {
     e.preventDefault();
+
+    // подсветка активной категории
     document.querySelectorAll(".category").forEach(x => x.classList.remove("active"));
     el.classList.add("active");
+
+    // ✅ 1) сначала обновляем цену (15 или 13)
+    try {
+      await loadUserPrice();
+    } catch (err) {
+      console.warn("[loadUserPrice] failed:", err);
+      // если упало — просто оставим 15
+    }
+
+    // ✅ 2) потом рисуем категорию с актуальной CURRENT_PRICE
     loadCategory(cat.id, cat.label);
   });
 
   catBox.appendChild(el);
 });
+
 
 /* ---------------- Adjust padding for flavors ---------------- */
 function adjustFlavorsPadding() {

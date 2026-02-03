@@ -7,3 +7,5 @@ build/
 .vscode/
 npm-debug.log*
 yarn-error.log*
+*.current.backup
+*.from.crazy

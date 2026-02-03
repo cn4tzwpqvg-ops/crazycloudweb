@@ -39,6 +39,7 @@
 <body>
 <header>
   <button class="icon-btn burger" id="burger" aria-label="Открыть меню">
+    <span class="burger-lines"><span></span><span></span><span></span></span>
   </button>
 
   <div class="logo"><span>CRAZY</span><span>CLOUD</span></div>
@@ -54,12 +55,12 @@
 
 <!-- side menu (ожидается в скриптах) -->
 <aside id="side-menu" class="side-menu" aria-hidden="true">
-  <button id="side-menu-close" class="icon-btn" aria-label="Закрыть меню">✖</button>
+  <button id="side-menu-close" class="side-close-btn" aria-label="Закрыть меню">✕</button>
   <nav class="side-menu-inner">
     <div class="side-links">
       <a href="reviews.html">Отзывы</a>
       <a href="delivery.html">Доставка и оплата</a>
-      <a href="#" id="footer-opt">Оптовый запрос</a>
+      <a href="https://t.me/crazycloud_manager" target="_blank" rel="noopener">Написать менеджеру</a>
     </div>
   </nav>
 </aside>
@@ -94,8 +95,8 @@
     </div>
 
     <div style="display:flex;gap:8px;padding:12px;">
-      <button id="back-to-flavors" class="btn secondary">Назад</button>
-      <button id="checkout" class="btn primary" aria-disabled="true">Оформить</button>
+      <button id="back-to-flavors" class="btn secondary back-btn">Назад</button>
+      <button id="checkout" class="btn primary checkout-btn" aria-disabled="true">Оформить</button>
     </div>
   </div>
 </aside>
@@ -108,25 +109,42 @@
     <h3>Оформление заказа</h3>
 
     <label for="checkout-city" class="checkout-label">Город:</label>
-    <input id="checkout-city" class="checkout-input" type="text" placeholder="Ваш город" />
+    <select id="checkout-city" class="checkout-select">
+      <option value="">Выберите город</option>
+      <option value="Bonn">Bonn</option>
+      <option value="Cologne">Cologne</option>
+      <option value="Düsseldorf">Düsseldorf</option>
+      <option value="Dortmund">Dortmund</option>
+      <option value="Essen">Essen</option>
+      <option value="Bochum">Bochum</option>
+      <option value="Bielefeld">Bielefeld</option>
+      <option value="Paderborn">Paderborn</option>
+      <option value="Hamm">Hamm</option>
+      <option value="Münster">Münстер</option>
+      <option value="Wuppertal">Wuppertal</option>
+      <option value="Hagen">Hagen</option>
+      <option value="Unna">Unna</option>
+    </select>
 
     <label for="checkout-delivery" class="checkout-label">Доставка:</label>
-    <select id="checkout-delivery" class="checkout-select" disabled>
-      <option value="">Выберите город сначала</option>
-      <option value="Courier">Курьер (Личная встреча)</option>
-      <option value="DHL">DHL (По всей Европе)</option>
-      <option value="Pickup">Самовывоз</option>
+    <select id="checkout-delivery" class="checkout-select">
+      <option value="">Выберите способ доставки</option>
+      <option value="courier">Курьер(по NRW)</option>
+      <option value="post">Почта(DHL)</option>
+      <!-- <option value="pickup">Самовывоз</option>  удалено -->
     </select>
 
     <label for="checkout-payment" class="checkout-label">Оплата:</label>
     <select id="checkout-payment" class="checkout-select" disabled>
-      <option value="Cash">Наличные</option>
+      <option value="">Выберите доставку сначала</option>
       <option value="Card">Карта</option>
+      <option value="Crypto">Криптовалюта</option>
+      <option value="Cash">Наличные</option>
     </select>
 
     <div style="display:flex;gap:8px;margin-top:12px;">
-      <button id="checkout-cancel" class="btn secondary">Отмена</button>
-      <button id="checkout-confirm" class="btn primary">Подтвердить</button>
+      <button id="checkout-cancel" class="btn secondary back-btn">Отмена</button>
+      <button id="checkout-confirm" class="btn primary checkout-btn">Подтвердить</button>
     </div>
   </div>
 </div>

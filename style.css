@@ -422,8 +422,8 @@ header {
   bottom: -100vh; /* полностью за экраном */
   height: 80vh;
   padding: 24px;
-  background: rgba(12,12,12,0.96);
-  backdrop-filter: blur(18px);
+  /* единый тёмно‑серый фон */
+  background: #1b1b1b;
   z-index: 200;
 
   display: flex;
@@ -432,37 +432,94 @@ header {
 
   border-radius: 22px 22px 0 0;
 
-  transform: translateY(0); /* убираем translateY */
+  transform: translateY(0);
   transition: bottom .35s cubic-bezier(.25,.46,.45,.94);
 
   overflow-y: auto;
 }
 
-.no-scroll {
-  overflow: hidden;      /* запрет скролла страницы */
-  height: 100vh;         /* фиксируем высоту */
-  position: fixed;       /* фиксируем положение */
-  width: 100%;           /* чтобы не было смещений */
-  top: 0;
-  left: 0;
-}
-
-
-
-
+/* При открытии поднимаем модалку до верха и растягиваем фон */
 #cart-modal.open{
-  transform:translateY(0);
+  bottom: 0;            /* показываем модалку снизу до верха */
+  height: 100vh;        /* растянуть на весь экран */
+  border-radius: 0;     /* убрать закругления, чтобы фон доходил до верха */
+  transform: none;
 }
 
-.cart-top{
-  display:flex;justify-content:space-between;align-items:center
+/* Убираем отдельный "квадрат" внутри: делаем inner прозрачным и без границ */
+.cart-modal-inner {
+  background: transparent;
+  padding: 0;
 }
-.cart-close{
-  background:transparent;border:none;color:#fff;font-size:22px;cursor:pointer
+.cart-modal-header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding: 6px 0 12px 0;
+  background: transparent;
+  border-bottom: none;
+}
+
+/* Скрываем крестик закрытия (убирает чёрную квадратную кнопку) */
+#cart-close,
+#cart-close.icon-btn {
+  display: none !important;
 }
 
 #cart-list{
   flex:1;overflow:auto;padding-right:6px;margin-top:6px
+}
+
+/* Каждый элемент корзины — отдельная строка */
+#cart-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 12px;
+}
+
+/* Убедиться, что дети занимают всю ширину и выравниваются нормально */
+#cart-list > * {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: transparent; /* если есть фон внутри — оставляем */
+}
+
+/* Минимальные правила для изображения/миниатюр в элементе корзины */
+#cart-list img,
+#cart-list .item-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  flex: 0 0 64px;
+  border-radius: 8px;
+}
+
+/* Контент (название/кол-во/цена) занимает оставшееся место */
+#cart-list .item-info,
+#cart-list .item-body {
+  flex: 1 1 auto;
+  min-width: 0; /* чтобы текст переносился корректно */
+}
+
+/* Кнопки/количество справа */
+#cart-list .item-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Мобильные правки: чуть меньше миниатюра и плотнее */
+@media (max-width: 420px) {
+  #cart-list img,
+  #cart-list .item-thumb { width: 52px; height: 52px; flex: 0 0 52px; }
+  #cart-list > * { gap: 8px; padding: 6px; }
 }
 
 /* cart item styles */
@@ -768,6 +825,25 @@ header {
   font-size: 16px;
   transition: all 0.2s ease;
   cursor: pointer;
+}
+
+/* Сделать кнопки в модалке checkout одинакового размера */
+.checkout-btn-confirm,
+.checkout-btn-cancel {
+  flex: 1 1 0;
+  padding: 12px 14px;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 14px;
+  min-height: 44px;
+  height: 44px;
+  box-sizing: border-box;
+}
+
+/* Уменьшим hover-увеличение для confirm, чтобы не «прыгал» */
+.checkout-btn-confirm:hover {
+  transform: none; /* или transform: scale(1.02); если нужен лёгкий эффект */
+  box-shadow: 0 4px 16px rgba(255,30,155,0.22);
 }
 
 .checkout-btn-confirm:hover {
@@ -1233,3 +1309,149 @@ header {
   font-weight: 700; 
 }
 
+/* Привести кнопки в модалке оформления к одному размеру */
+#checkout-modal .actions { display:flex; gap:10px; align-items:center; }
+#checkout-modal button,
+#checkout-modal #checkout-confirm,
+#checkout-modal #checkout-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  height: 44px;
+  min-height: 44px;
+  line-height: 1;
+  font-size: 15px;
+  border-radius: 12px;
+  width: auto !important;   /* отменяем принудительное растяжение */
+  min-width: 120px;         /* можно подкорректировать */
+}
+
+/* Визуальное отличие Confirm / Cancel */
+#checkout-modal #checkout-confirm {
+  background: linear-gradient(90deg,#ff3bbd,#ff1e9b);
+  color: #fff;
+  border: none;
+  box-shadow: 0 8px 24px rgba(255,30,155,0.16);
+}
+
+#checkout-modal #checkout-cancel {
+  background: #2b2b2b;
+  color: #fff;
+  border: 1px solid #3a3a3a;
+}
+
+/* На мобильных не сжимать слишком сильно */
+@media (max-width: 420px) {
+  #checkout-modal button,
+  #checkout-modal #checkout-confirm,
+  #checkout-modal #checkout-cancel {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+}
+
+/* Общие правки: отменяем глобальное растяжение кнопок с классом .checkout-btn */
+.checkout-btn { width: auto !important; }
+
+/* ------ CART modal: выровнять кнопки ------ */
+#cart-modal .cart-modal-inner > div {
+  /* контейнер с кнопками: гарантируем flex-раскладку */
+  display: flex !important;
+  gap: 8px !important;
+  align-items: center !important;
+  padding: 12px !important;
+}
+
+#cart-modal .back-btn,
+#cart-modal .checkout-btn {
+  flex: 1 1 0 !important;
+  min-width: 0 !important; /* важно для корректного сжатия на узких экранах */
+  width: auto !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 12px 16px !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  border-radius: 12px !important;
+}
+
+/* сохранить визуальный стиль главной кнопки */
+#cart-modal .checkout-btn {
+  background: linear-gradient(90deg,#ff3bbd,#ff1e9b) !important;
+  color: #fff !important;
+  box-shadow: 0 10px 36px rgba(255,30,155,0.18) !important;
+  border: none !important;
+}
+
+/* второстепенная кнопка */
+#cart-modal .back-btn {
+  background: #2b2b2b !important;
+  color: #fff !important;
+  border: 1px solid #3a3a3a !important;
+}
+
+/* ------ CHECKOUT modal: выровнять кнопки "Отмена" и "Подтвердить" ------ */
+#checkout-modal .checkout-modal-content > div:last-child {
+  display: flex !important;
+  gap: 8px !important;
+  align-items: center !important;
+  margin-top: 12px !important;
+}
+
+/* одинаковые размеры для кнопок */
+#checkout-modal #checkout-cancel,
+#checkout-modal #checkout-confirm,
+#checkout-modal .back-btn,
+#checkout-modal .checkout-btn {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  width: auto !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 10px 14px !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  border-radius: 12px !important;
+}
+
+/* визуальные различия */
+#checkout-modal #checkout-confirm {
+  background: linear-gradient(90deg,#ff3bbd,#ff1e9b) !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 8px 24px rgba(255,30,155,0.16) !important;
+}
+
+#checkout-modal #checkout-cancel {
+  background: #2b2b2b !important;
+  color: #fff !important;
+  border: 1px solid #3a3a3a !important;
+}
+
+/* Мобильный вариант: при очень узком экране кнопки могут быть в колонку */
+@media (max-width: 420px) {
+  #cart-modal .cart-modal-inner > div,
+  #checkout-modal .checkout-modal-content > div:last-child {
+    flex-direction: column !important;
+    gap: 10px !important;
+    align-items: stretch !important;
+  }
+  #cart-modal .back-btn,
+  #cart-modal .checkout-btn,
+  #checkout-modal #checkout-cancel,
+  #checkout-modal #checkout-confirm {
+    width: 100% !important;
+    flex: none !important;
+  }
+}
+
+/* Рекомендация: удалите/уберите inline-style стили у контейнеров в HTML (style="display:flex;..."),
+   если после патча остаются конфликтующие inline-правила. */

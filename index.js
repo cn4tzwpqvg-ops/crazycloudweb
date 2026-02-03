@@ -683,6 +683,186 @@ function updateCart() {
 
 
 
+/* ====================== Client-side cart limits & protections ====================== */
+/**
+ * enforceCartLimits — применяет ограничения к глобальному cart:
+ * - не больше MAX_ITEMS_PER_ORDER уникальных позиций
+ * - не больше MAX_QTY_PER_ITEM штук на одну позицию
+ * Если были изменения — возвращает список сообщений (для showToast).
+ */
+function enforceCartLimits() {
+  if (!Array.isArray(cart)) return [];
+
+  const msgs = [];
+
+  // Обрезаем число уникальных позиций
+  if (cart.length > MAX_ITEMS_PER_ORDER) {
+    const removed = cart.splice(MAX_ITEMS_PER_ORDER);
+    msgs.push(`Можно добавлять не более ${MAX_ITEMS_PER_ORDER} разных позиций. ${removed.length} позиций удалено.`);
+  }
+
+  // Ограничиваем количество на позицию
+  cart.forEach(item => {
+    // гарантируем поле maxQty и корректный тип
+    const serverMax = Number(item.maxQty || MAX_QTY_PER_ITEM) || MAX_QTY_PER_ITEM;
+    const allowed = Math.min(serverMax, MAX_QTY_PER_ITEM);
+    if (Number(item.qty) > allowed) {
+      item.qty = allowed;
+      msgs.push(`Количество позиции "${item.flavor || item.name || ''}" ограничено ${allowed} шт.`);
+    }
+    // нормируем отрицательные/нулевые значения
+    if (!item.qty || Number(item.qty) < 1) {
+      item.qty = 1;
+      msgs.push(`Количество у позиции "${item.flavor || item.name || ''}" установлено в 1.`);
+    }
+    // сохраняем maxQty актуальным
+    item.maxQty = allowed;
+  });
+
+  // дополнительная защита: общий лимит единиц (по желанию)
+  const totalUnits = cart.reduce((s, it) => s + (Number(it.qty) || 0), 0);
+  const hardTotalLimit = MAX_ITEMS_PER_ORDER * MAX_QTY_PER_ITEM;
+  if (totalUnits > hardTotalLimit) {
+    // уменьшаем по последним позициям (простая эвристика)
+    let overflow = totalUnits - hardTotalLimit;
+    for (let i = cart.length - 1; i >= 0 && overflow > 0; i--) {
+      const it = cart[i];
+      const canReduce = Math.min(it.qty - 1, overflow);
+      if (canReduce > 0) {
+        it.qty -= canReduce;
+        overflow -= canReduce;
+      }
+    }
+    msgs.push(`Общее количество товаров ограничено ${hardTotalLimit} шт. Корзина скорректирована.`);
+  }
+
+  // если были изменения — синхронизировать UI
+  if (msgs.length) {
+    try { if (typeof updateCart === 'function') updateCart(); } catch (e) { console.warn("updateCart failed after enforceCartLimits", e); }
+  }
+
+  return msgs;
+}
+
+/* returns array of human messages (empty if ok) */
+function getCartLimitIssues() {
+  const issues = [];
+  if (!Array.isArray(cart)) return ["Корзина пуста или повреждена. Попробуйте перезагрузить страницу."];
+
+  if (cart.length === 0) return [];
+
+  if (cart.length > MAX_ITEMS_PER_ORDER) {
+    issues.push(`Нельзя больше ${MAX_ITEMS_PER_ORDER} разных позиций в заказе.`);
+  }
+
+  for (const it of cart) {
+    const allowed = Math.min(Number(it.maxQty || MAX_QTY_PER_ITEM) || MAX_QTY_PER_ITEM, MAX_QTY_PER_ITEM);
+    if (!it.qty || Number(it.qty) < 1) issues.push(`Проблема с количеством позиции "${it.flavor || it.name || ''}".`);
+    if (Number(it.qty) > allowed) issues.push(`Максимум для "${it.flavor || it.name || ''}" — ${allowed} шт.`);
+  }
+
+  const totalUnits = cart.reduce((s, it) => s + (Number(it.qty) || 0), 0);
+  const hardTotalLimit = MAX_ITEMS_PER_ORDER * MAX_QTY_PER_ITEM;
+  if (totalUnits > hardTotalLimit) issues.push(`Общее количество товаров не должно превышать ${hardTotalLimit} шт.`);
+
+  return issues;
+}
+
+/* Monkey-patch updateCart — чтобы всегда применять ограничения при обновлении */
+if (typeof updateCart === 'function') {
+  try {
+    const _origUpdateCart = updateCart;
+    updateCart = function patchedUpdateCart(...args) {
+      enforceCartLimits(); // синхронизируем прежде чем отрисовать
+      return _origUpdateCart.apply(this, args);
+    };
+  } catch (e) {
+    console.warn("Failed to monkey-patch updateCart", e);
+  }
+}
+
+/* Защита при добавлении в корзину:
+   если на странице есть кнопка add-to-cart — перехватываем click и запрещаем действие
+   если оригинальная логика привязана как onclick — мы слушаем в capture, предотвращаем если нарушает лимит.
+*/
+(function patchAddButton() {
+  const addBtn = realGet("add-to-cart") || document.querySelector('[data-add-to-cart],#add-to-cart,.add-to-cart');
+  if (!addBtn) return;
+
+  // только одна привязка
+  if (addBtn.__limitsPatched) return;
+  addBtn.__limitsPatched = true;
+
+  addBtn.addEventListener('click', function (ev) {
+    try {
+      // предполагается, что переменная active описывается в основном коде
+      const activeFlavor = window.active || null;
+      // простая эвристика: если нет active — ничего делать не будем (оригинальная логика покажет ошибку)
+      if (!activeFlavor) return;
+
+      // проверяем уникальные позиции
+      const exists = Array.isArray(cart) && cart.find(it => it.flavor === (activeFlavor.flavor || activeFlavor.name));
+      if (!exists && Array.isArray(cart) && cart.length >= MAX_ITEMS_PER_ORDER) {
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        showToast && showToast(`Можно добавить не более ${MAX_ITEMS_PER_ORDER} разных позиций.`);
+        return;
+      }
+
+      // проверяем лимит по qty (если есть поле active.qty — доступный склад)
+      const allowedMax = Math.max(1, Math.min(Number(activeFlavor.qty || MAX_QTY_PER_ITEM), MAX_QTY_PER_ITEM));
+      if (exists && Number(exists.qty) >= allowedMax) {
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        showToast && showToast(`Не больше ${allowedMax} шт этой позиции.`);
+        return;
+      }
+      // иначе — пропускаем, оригинальная логика выполнится
+    } catch (e) {
+      console.warn("addBtn limit-check failed", e);
+    }
+  }, true /* capture чтобы перехватить inline onclick */);
+})();
+
+/* Защита перед отправкой заказа (кнопка подтверждения чекаута) */
+(function patchCheckoutConfirm() {
+  const confirmBtn = realGet("checkout-confirm") || document.getElementById("checkout-confirm") || document.querySelector('[data-checkout-confirm], #confirm-order, .checkout-confirm');
+  if (!confirmBtn) return;
+  if (confirmBtn.__limitsPatched) return;
+  confirmBtn.__limitsPatched = true;
+
+  confirmBtn.addEventListener('click', function (ev) {
+    const issues = getCartLimitIssues();
+    if (issues.length) {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      // применяем авто-поправки и показываем первое сообщение
+      const msgs = enforceCartLimits();
+      if (msgs && msgs.length) {
+        showToast && showToast(msgs[0]);
+      } else {
+        showToast && showToast(issues[0]);
+      }
+      return false;
+    }
+    return true;
+  }, true);
+})();
+
+/* Наблюдатель: если cart меняется динамически извне, применяем лимиты */
+try {
+  let lastCartSnapshot = '';
+  setInterval(() => {
+    try {
+      const s = JSON.stringify(cart || []);
+      if (s !== lastCartSnapshot) {
+        lastCartSnapshot = s;
+        enforceCartLimits();
+      }
+    } catch (e) {}
+  }, 800);
+} catch (e) { /* noop */ }
+
 /* ---------------- UI: menu & cart open/close ---------------- */
 const burger = safeGet("burger");
 const menuBackdrop = safeGet("menu-backdrop");
@@ -895,11 +1075,55 @@ async function loadUserPrice(force) {
   }
 }
 
+/* --- Заменена ненадёжная IIFE, которая срабатыла слишком рано (элемент динамический)
+     На её месте: делегированный обработчик change/input + утилита для включения зависимых полей.
+     Это работает для динамически вставляемых полей и при повторной инициализации. */
 
+function enableCheckoutDependentsIfNeeded(cityEl) {
+  try {
+    const val = String((cityEl && cityEl.value) || "").trim();
+    const delivery = realGet("checkout-delivery") || document.querySelector("#checkout-delivery");
+    const payment = realGet("checkout-payment") || document.querySelector("#checkout-payment");
+    const tgNick = realGet("checkout-tgNick") || document.querySelector("#checkout-tgNick");
 
+    const shouldEnable = !!val;
 
+    [delivery, payment, tgNick].filter(Boolean).forEach(el => {
+      el.disabled = !shouldEnable;
+      if (shouldEnable) {
+        el.classList && el.classList.remove("disabled");
+        el.removeAttribute && el.removeAttribute("aria-disabled");
+        // плавное появление, если нужно
+        try { el.style.opacity = 1; } catch (e) {}
+      } else {
+        el.classList && el.classList.add("disabled");
+        el.setAttribute && el.setAttribute("aria-disabled", "true");
+      }
+    });
+  } catch (e) {
+    console.warn("enableCheckoutDependentsIfNeeded error", e);
+  }
+}
 
+// Делегированный обработчик — сработает для динамически добавленных селектов
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (!t || !t.id) return;
+  if (t.id === "checkout-city") enableCheckoutDependentsIfNeeded(t);
+});
 
+// На случай виджетов, которые используют input вместо change
+document.addEventListener("input", (e) => {
+  const t = e.target;
+  if (!t || !t.id) return;
+  if (t.id === "checkout-city") enableCheckoutDependentsIfNeeded(t);
+});
+
+// При загрузке страницы — если поле уже в DOM
+document.addEventListener("DOMContentLoaded", () => {
+  const city = realGet("checkout-city") || document.querySelector("#checkout-city");
+  if (city) enableCheckoutDependentsIfNeeded(city);
+});
 
 /* === Проверка Telegram ника (латиница, цифры, _, начинается с @) === */
 function validateTgNick(nick) {
@@ -938,10 +1162,57 @@ function showField(field) {
   });
 }
 
+// --- Заменённая логика: инициализация слушателей для полей чекаута при открытии модалки
+function initCheckoutFieldListeners() {
+  // пытаемся получить реальные элементы (если они динамически вставлены)
+  const cityEl = realGet("checkout-city") || document.querySelector("#checkout-city");
+  const deliveryEl = realGet("checkout-delivery") || document.querySelector("#checkout-delivery");
+  const paymentEl = realGet("checkout-payment") || document.querySelector("#checkout-payment");
+  const tgNickEl = realGet("checkout-tgNick") || document.querySelector("#checkout-tgNick");
+
+  if (!cityEl) return;
+
+  // обновляем внешние переменные (если нужно дальше использовать)
+  checkoutCity = cityEl;
+  checkoutDelivery = deliveryEl || checkoutDelivery;
+  checkoutPayment = paymentEl || checkoutPayment;
+
+  const dependents = [checkoutDelivery, checkoutPayment, tgNickEl].filter(Boolean);
+
+  function setDependentsEnabled(enabled) {
+    dependents.forEach(el => {
+      try {
+        el.disabled = !enabled;
+        if (enabled) {
+          el.classList && el.classList.remove("disabled");
+          el.removeAttribute && el.removeAttribute("aria-disabled");
+        } else {
+          el.classList && el.classList.add("disabled");
+          el.setAttribute && el.setAttribute("aria-disabled", "true");
+        }
+      } catch (e) {}
+    });
+  }
+
+  function onCityChange() {
+    const val = String(cityEl.value || "").trim();
+    setDependentsEnabled(!!val);
+  }
+
+  // безопасно отписываем (если уже вешали)
+  try { cityEl.removeEventListener("change", onCityChange); } catch (e) {}
+  cityEl.addEventListener("change", onCityChange);
+
+  // применим начальное состояние (если уже выбран город)
+  onCityChange();
+}
+
 // --- Открытие модалки ---
 checkoutBtn.addEventListener("click", () => {
   if (cart.length === 0) return;
 
+  // сброс значений
+  // если поля генерируются динамически — они будут найдены в initCheckoutFieldListeners
   checkoutCity.value = "";
   checkoutDelivery.value = "";
   checkoutPayment.value = "";
@@ -954,10 +1225,16 @@ checkoutBtn.addEventListener("click", () => {
     cartOverlay.style.pointerEvents = "none";
   }
 
-  checkoutDelivery.disabled = true;
-  checkoutPayment.disabled = true;
-});
+  // по умолчанию блокируем зависимости
+  // если элементы ещё не в DOM — initCheckoutFieldListeners сделает это правильно
+  try {
+    if (checkoutDelivery) checkoutDelivery.disabled = true;
+    if (checkoutPayment) checkoutPayment.disabled = true;
+  } catch (e) {}
 
+  // Инициализируем/перепривязываем слушатели к реальным элементам
+  initCheckoutFieldListeners();
+});
 
 // --- Закрытие модалки ---
 checkoutCancel.addEventListener("click", closeCheckout);

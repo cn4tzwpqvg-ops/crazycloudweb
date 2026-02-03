@@ -1,5 +1,14 @@
 /* ================= TELEGRAM MINI APP ================= */
-const tg = window.Telegram?.WebApp;
+const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+
+/*if (tg) {
+  tg.ready();
+  tg.expand();
+
+  if (!(tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.username)) {
+    console.warn("Telegram ник недоступен. Мини-приложение открыто вне Telegram или пользователь не вошел.");
+  }
+}*/
 
 function getTelegramContext() {
   const tgApp = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
@@ -25,7 +34,207 @@ if (tg) {
   }
 }
 
-const API_BASE = "https://bot1-production-376a.up.railway.app";
+const API_BASE = "https://crazyde-production.up.railway.app";
+
+// new: client-side safety & limits
+const MAX_ITEMS_PER_ORDER = 12;        // максимум уникальных позиций в заказе
+const MAX_QTY_PER_ITEM = 5;           // максимум единиц на одну позицию
+const ORDER_TEXT_LIMIT = 3000;        // максимум символов для orderText (client-side)
+const FETCH_TIMEOUT_MS = 12_000;      // стандартный таймаут для сетевых вызовов
+
+// safe DOM getter — возвращает настоящий элемент или малую заглушку, чтобы не ломать скрипт на страницах с неполной вёрсткой
+function safeGet(id) {
+  const el = document.getElementById(id);
+  if (el) return el;
+  console.warn(`safeGet: element #${id} not found — returning stub`);
+  // минимальная заглушка с необходимыми полями/методами, чтобы скрипт не падал
+  const stub = document.createElement ? document.createElement("div") : { };
+  if (stub) {
+    stub.style = stub.style || {};
+    stub.classList = stub.classList || {
+      add: ()=>{},
+      remove: ()=>{},
+      contains: ()=>false
+    };
+    // event helpers
+    stub.addEventListener = stub.addEventListener || (()=>{});
+    stub.removeEventListener = stub.removeEventListener || (()=>{});
+    // attributes / DOM helpers
+    stub.removeAttribute = stub.removeAttribute || (()=>{});
+    stub.setAttribute = stub.setAttribute || (()=>{});
+    stub.appendChild = stub.appendChild || (()=>{});
+    stub.querySelector = stub.querySelector || (()=>null);
+    stub.querySelectorAll = stub.querySelectorAll || (()=>[]);
+    stub.getBoundingClientRect = stub.getBoundingClientRect || (() => ({ top: 0, left: 0, width: 0, height: 0 }));
+    stub.focus = stub.focus || (()=>{});
+    stub.value = stub.value || "";
+    stub.disabled = true;
+    stub.textContent = stub.textContent || "";
+    stub.innerHTML = stub.innerHTML || "";
+  }
+  return stub;
+}
+
+/**
+ * realGet(id) возвращает реальный элемент из DOM или null.
+ * Используйте, когда нужна настоящая нода (MutationObserver, getBoundingClientRect и т.п.).
+ */
+function realGet(id) {
+  if (typeof document.getElementById !== "function") return null;
+  const el = document.getElementById(id);
+  // элемент должен существовать в документе и быть нодой-элементом
+  if (el && el.nodeType === 1 && document.contains(el)) return el;
+  return null;
+}
+
+// fetch wrapper with timeout and simple retry (1 retry on network abort)
+async function fetchWithTimeout(url, opts = {}, timeout = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const signal = controller.signal;
+  opts.signal = signal;
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    let res = await fetch(url, opts);
+    clearTimeout(timer);
+    return res;
+  } catch (err) {
+    clearTimeout(timer);
+    // retry once for transient network errors (but don't retry 4xx/5xx because fetch throws only on network)
+    if (err && err.name === "AbortError") throw err;
+    try {
+      // small delay before retry
+      await new Promise(r => setTimeout(r, 250));
+      const controller2 = new AbortController();
+      opts.signal = controller2.signal;
+      const timer2 = setTimeout(() => controller2.abort(), timeout);
+      const res2 = await fetch(url, opts);
+      clearTimeout(timer2);
+      return res2;
+    } catch (e2) { throw e2; }
+  }
+}
+
+// global error handlers — показываем в консоль и toast, но не ломаем UI
+window.addEventListener("error", (ev) => {
+  console.error("Uncaught error:", ev.error || ev.message || ev);
+  try { showToast("Произошла ошибка. Обновите страницу."); } catch {}
+});
+window.addEventListener("unhandledrejection", (ev) => {
+  console.error("Unhandled promise rejection:", ev.reason);
+  try { showToast("Ошибка сети/скрипта. Попробуйте снова."); } catch {}
+});
+
+function safeJsonParse(raw) {
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+function getTgApp() {
+  return (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+}
+
+function getInitDataStrict() {
+  const tgApp = getTgApp();
+  const initData = (tgApp && typeof tgApp.initData === "string") ? tgApp.initData.trim() : "";
+  if (!initData || initData.length > 5000) return "";
+  return initData;
+}
+
+/* ---------------- Delivery normalization ---------------- */
+/**
+ * Приводит значение доставки к внутреннему формату, который ожидает бэкенд.
+ * Поддерживает старые русские значения и уже нормализованные.
+ */
+function normalizeDeliveryValue(val) {
+  if (!val) return "";
+  const v = String(val).trim();
+  if (!v) return "";
+  const low = v.toLowerCase();
+  if (low === "курьер" || low === "courier") return "Courier";
+  if (low === "dhl") return "DHL";
+  if (low === "pickup" || low === "самовывоз") return "Pickup";
+  return v; // fallback — не трогаем неизвестное значение
+}
+
+// Вставляем нормализацию непосредственно перед отправкой в apiPostTG,
+// чтобы гарантировать корректный delivery независимо от источника.
+async function apiPostTG(path, bodyObj) {
+  const initData = getInitDataStrict();
+
+  if (!initData) {
+    return { ok: false, status: 0, json: null, raw: "", error: "NO_INITDATA" };
+  }
+
+  const url = String(API_BASE || "").replace(/\/$/, "") + path;
+
+  // Если отправляем заказ — нормализуем поле доставки на клиенте
+  try {
+    if (bodyObj && typeof bodyObj === "object" && /send-?order/i.test(String(path))) {
+      if ("delivery" in bodyObj) {
+        bodyObj.delivery = normalizeDeliveryValue(bodyObj.delivery);
+      }
+      // защитный лимит: не даём отправить слишком большой orderText или слишком много позиций
+      try {
+        const itemsCount = (bodyObj.orderText || "").split(/\n/).filter(Boolean).length;
+        if (itemsCount > MAX_ITEMS_PER_ORDER) {
+          return { ok: false, status: 400, json: null, raw: "", error: "TOO_MANY_ITEMS" };
+        }
+        if ((bodyObj.orderText || "").length > ORDER_TEXT_LIMIT) {
+          return { ok: false, status: 400, json: null, raw: "", error: "ORDER_TEXT_TOO_LONG" };
+        }
+      } catch (e) { /* ignore */ }
+    }
+  } catch (e) {
+    console.warn("normalizeDeliveryValue failed:", e);
+  }
+
+  // Generate a stable idempotency key per attempt
+  const idemKey = (() => {
+    try {
+      const seed = `${path}|${Date.now()}|${Math.random()}`;
+      const enc = new TextEncoder();
+      const bytes = enc.encode(seed);
+      let sum = 0;
+      for (let i = 0; i < bytes.length; i++) sum = (sum * 31 + bytes[i]) >>> 0;
+      return `miniapp-${sum.toString(16)}-${Math.floor(Math.random()*1e6)}`;
+    } catch { return `miniapp-${Date.now()}`; }
+  })();
+
+  const res = await fetchWithTimeout(url, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      "x-telegram-init-data": initData,
+      "Idempotency-Key": idemKey
+    },
+    body: JSON.stringify(bodyObj || {})
+  }, FETCH_TIMEOUT_MS);
+
+  const raw = await res.text();
+  const json = safeJsonParse(raw);
+
+  return { ok: res.ok, status: res.status, json, raw, error: null };
+}
+
+function humanApiError(code) {
+  switch (code) {
+    case "ACTIVE_ORDER_EXISTS":
+      return "У вас уже есть активный заказ. Завершите или отмените его, чтобы создать новый.";
+    case "INITDATA_EXPIRED":
+      return "Сессия Telegram устарела. Закройте и заново откройте мини-приложение в Telegram.";
+    case "TOO_MANY_REQUESTS":
+      return "Слишком часто. Подождите минуту и попробуйте снова.";
+    case "REPLAY_DETECTED":
+      return "Повтор запроса обнаружен. Обновите мини-приложение и попробуйте снова.";
+    case "UNAUTHORIZED":
+      return "Не удалось подтвердить Telegram. Откройте мини-приложение строго внутри Telegram.";
+    case "USER_BANNED":
+      return "Вы заблокированы и не можете создавать заказы.";
+    default:
+      return null;
+  }
+}
+
 
 
 /* ---------------- Config ---------------- */
@@ -70,7 +279,7 @@ let currentCategoryId = null;
 let currentCategoryLabel = null;
 
 function showToast(text) {
-  const box = document.getElementById("toast-box");
+  const box = safeGet("toast-box");
   if (!box) return;
 
   const el = document.createElement("div");
@@ -95,7 +304,7 @@ function escapeHtml(s) { return String(s).replace(/[&<>"']/g, m => ({ '&': '&amp
 function normalizeKey(s) { return String(s || "").toLowerCase().replace(/[\s\-\_]/g, ""); }
 
 /* ---------------- Render categories ---------------- */
-const catBox = document.getElementById("categories");
+const catBox = safeGet("categories");
 categories.forEach(cat => {
   const el = document.createElement("div");
   el.className = "category";
@@ -142,7 +351,7 @@ function adjustFlavorsPadding() {
 
 /* ---------------- Load Category ---------------- */
 async function loadCategory(normId, displayLabel) {
-  const card = document.getElementById("product-card");
+  const card = safeGet("product-card");
   card.innerHTML = "<div style='opacity:.7'>Загрузка...</div>";
 
   try {
@@ -206,7 +415,7 @@ async function loadCategory(normId, displayLabel) {
         </div>
       </div>`;
 
-    const box = document.getElementById("flavors-box");
+    const box = safeGet("flavors-box");
     let active = null;
 
     // Сортируем: сначала доступные, потом распроданные
@@ -239,7 +448,7 @@ async function loadCategory(normId, displayLabel) {
     active = item;
     b.focus();
 
-    const addBtn = document.getElementById("add-to-cart");
+    const addBtn = safeGet("add-to-cart");
     if (addBtn) {
       addBtn.classList.add("active");
       addBtn.removeAttribute('aria-disabled');
@@ -247,9 +456,9 @@ async function loadCategory(normId, displayLabel) {
       // плавный скролл к кнопке "Добавить в корзину"
       const rect = addBtn.getBoundingClientRect();
       const footer = document.querySelector("footer");
-      const footerRect = footer.getBoundingClientRect();
+      const footerRect = footer ? footer.getBoundingClientRect() : { top: document.body.scrollHeight + window.innerHeight };
       let scrollTarget = rect.top + window.scrollY - 20;
-      const maxScroll = footerRect.top + window.scrollY - window.innerHeight;
+      const maxScroll = (footerRect.top || (document.body.scrollHeight + window.innerHeight)) + window.scrollY - window.innerHeight;
       if (scrollTarget > maxScroll) scrollTarget = maxScroll;
       window.scrollTo({ top: scrollTarget, behavior: "smooth" });
     }
@@ -261,7 +470,7 @@ async function loadCategory(normId, displayLabel) {
 // --- После добавления всех кнопок ---
 adjustFlavorsPadding();
 
-  const addBtn = document.getElementById("add-to-cart");
+  const addBtn = safeGet("add-to-cart");
 addBtn.onclick = () => {
   if (!active) {
     showToast("Пожалуйста, выберите вкус.");
@@ -339,7 +548,7 @@ function priceHtml(item) {
 
 /* ---------------- Cart logic ---------------- */
 function updateCart() {
-  const list = document.getElementById("cart-list");
+  const list = safeGet("cart-list");
   list.innerHTML = "";
   let total = 0;
   let totalItems = 0;
@@ -407,15 +616,15 @@ function updateCart() {
   });
 
   // total (с евро)
-  document.getElementById("cart-total").textContent = total;
+  safeGet("cart-total").textContent = formatEuro(total);
 
 
-  const badge = document.getElementById("cart-count");
+  const badge = safeGet("cart-count");
   badge.style.display = "inline-block";
   badge.textContent = totalItems;
 
-  const cartListEl = document.getElementById("cart-list");
-  const checkoutBtn = document.getElementById("checkout");
+  const cartListEl = safeGet("cart-list");
+  const checkoutBtn = safeGet("checkout");
 
   function updateCheckoutButton() {
     if (totalItems === 0) {
@@ -475,54 +684,70 @@ function updateCart() {
 
 
 /* ---------------- UI: menu & cart open/close ---------------- */
-const burger = document.getElementById("burger");
-const menuBackdrop = document.getElementById("menu-backdrop");
-const sideMenu = document.getElementById("side-menu");
-const sideMenuCloseBtn = document.getElementById("side-menu-close");
-const cartBtn = document.getElementById("cart");
-const cartModal = document.getElementById("cart-modal");
-const cartOverlay = document.getElementById("cart-overlay");
-const cartCloseBtn = document.getElementById("cart-close");
+const burger = safeGet("burger");
+const menuBackdrop = safeGet("menu-backdrop");
+const sideMenu = safeGet("side-menu");
+const sideMenuCloseBtn = safeGet("side-menu-close");
+const cartBtn = safeGet("cart");
+const cartModal = safeGet("cart-modal");
+const cartOverlay = safeGet("cart-overlay");
+const cartCloseBtn = safeGet("cart-close");
 const burgerBtn = document.querySelector(".burger");
 
-burger.addEventListener("click", () => {
-  menuBackdrop.style.display = "block";
-  setTimeout(() => sideMenu.classList.add("open"), 10);
-  burgerBtn.classList.add("open");
-});
+if (burger) {
+  burger.addEventListener("click", () => {
+     menuBackdrop.style.display = "block";
+     setTimeout(() => sideMenu.classList.add("open"), 10);
+     burgerBtn.classList.add("open");
+  });
+}
 
-sideMenuCloseBtn.addEventListener("click", () => {
-  sideMenu.classList.remove("open");
-  menuBackdrop.style.display = "none";
-  burgerBtn.classList.remove("open");
-});
+if (sideMenuCloseBtn) {
+  sideMenuCloseBtn.addEventListener("click", () => {
+     sideMenu.classList.remove("open");
+     menuBackdrop.style.display = "none";
+     burgerBtn.classList.remove("open");
+   });
+ }
 
-menuBackdrop.addEventListener("click", (e) => {
-  if (e.target === menuBackdrop) {
-    sideMenu.classList.remove("open");
-    menuBackdrop.style.display = "none";
-    burgerBtn.classList.remove("open");
-  }
-});
+if (menuBackdrop) {
+  menuBackdrop.addEventListener("click", (e) => {
+    if (e.target === menuBackdrop) {
+      sideMenu.classList.remove("open");
+      menuBackdrop.style.display = "none";
+      if (burgerBtn) burgerBtn.classList.remove("open");
+    }
+  });
+}
 
 function openCart() {
+  if (!cartModal || !cartOverlay) return;
   cartModal.style.bottom = "0";
   cartOverlay.style.display = "block";
   document.body.classList.add("no-scroll");
+  cartModal.classList.add("open");          // ✅ добавили
 }
+
 function closeCart() {
+  if (!cartModal || !cartOverlay) return;
   cartModal.style.bottom = "-100vh";
   cartOverlay.style.display = "none";
   document.body.classList.remove("no-scroll");
+  cartModal.classList.remove("open");       // ✅ убрали
 }
-cartBtn.addEventListener("click", (e) => {
-  e.stopPropagation();
-  if (cartModal.classList.contains("open")) closeCart();
-  else openCart();
-});
-cartCloseBtn.addEventListener("click", closeCart);
-cartOverlay.addEventListener("click", closeCart);
-cartModal.addEventListener("click", e => e.stopPropagation());
+
+if (cartBtn) {
+  cartBtn.addEventListener("click", (e) => {
+   e.stopPropagation();
+   if (cartModal.classList.contains("open")) closeCart();
+   else openCart();
+ });
+}
+
+if (cartCloseBtn) cartCloseBtn.addEventListener("click", closeCart);
+if (cartOverlay) cartOverlay.addEventListener("click", closeCart);
+if (cartModal) cartModal.addEventListener("click", e => e.stopPropagation());
+
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
@@ -536,93 +761,140 @@ document.addEventListener("keydown", (e) => {
 });
 
 /* ------------- add-to-cart flying dot animation ------------- */
-const flyDot = document.getElementById("fly-dot");
+const flyDot = safeGet("fly-dot");
 function animateFlyToCart(sourceElem) {
-  const srcRect = sourceElem.getBoundingClientRect();
-  const cartRect = cartBtn.getBoundingClientRect();
-  const startX = srcRect.left + srcRect.width / 2;
-  const startY = srcRect.top + srcRect.height / 2;
-  const endX = cartRect.left + cartRect.width / 2;
-  const endY = cartRect.top + cartRect.height / 2;
+  if (!sourceElem || !flyDot || !cartBtn) return;
+  try {
+    const srcRect = sourceElem.getBoundingClientRect();
+    const cartRect = cartBtn.getBoundingClientRect();
+    const startX = srcRect.left + srcRect.width / 2;
+    const startY = srcRect.top + srcRect.height / 2;
+    const endX = cartRect.left + cartRect.width / 2;
+    const endY = cartRect.top + cartRect.height / 2;
 
-  flyDot.style.left = startX + "px";
-  flyDot.style.top = startY + "px";
-  flyDot.style.opacity = 1;
-  flyDot.style.transform = "translate(-50%,-50%) scale(1)";
+    flyDot.style.left = startX + "px";
+    flyDot.style.top = startY + "px";
+    flyDot.style.opacity = 1;
+    flyDot.style.transform = "translate(-50%,-50%) scale(1)";
 
-  flyDot.style.transition = "transform 520ms cubic-bezier(.2,.9,.25,1), opacity 120ms linear";
-  const dx = endX - startX;
-  const dy = endY - startY;
-  requestAnimationFrame(() => {
-    flyDot.style.transform = `translate(${dx}px, ${dy}px) scale(.2)`;
-  });
+    flyDot.style.transition = "transform 520ms cubic-bezier(.2,.9,.25,1), opacity 120ms linear";
+    const dx = endX - startX;
+    const dy = endY - startY;
+    requestAnimationFrame(() => {
+      flyDot.style.transform = `translate(${dx}px, ${dy}px) scale(.2)`;
+    });
 
-  setTimeout(() => {
-    flyDot.style.opacity = 0;
-    flyDot.style.transition = "opacity 120ms linear";
-    flyDot.style.transform = "translate(-50%,-50%) scale(.2)";
     setTimeout(() => {
-      flyDot.style.transform = "translate(-50%,-50%) scale(1)";
-      flyDot.style.left = "-9999px";
-      flyDot.style.top = "-9999px";
-    }, 180);
-  }, 560);
+      flyDot.style.opacity = 0;
+      flyDot.style.transition = "opacity 120ms linear";
+      flyDot.style.transform = "translate(-50%,-50%) scale(.2)";
+      setTimeout(() => {
+        flyDot.style.transform = "translate(-50%,-50%) scale(1)";
+        flyDot.style.left = "-9999px";
+        flyDot.style.top = "-9999px";
+      }, 180);
+    }, 560);
+  } catch (e) { /* swallow animation errors */ }
 }
 
+
 /* ---------------- Checkout modal ---------------- */
-const checkoutModal = document.getElementById("checkout-modal");
-const checkoutConfirm = document.getElementById("checkout-confirm");
-const checkoutCancel = document.getElementById("checkout-cancel");
-const checkoutCity = document.getElementById("checkout-city");
-const checkoutDelivery = document.getElementById("checkout-delivery");
-const checkoutPayment = document.getElementById("checkout-payment");
-const checkoutBtn = document.getElementById("checkout");
-const backToFlavors = document.getElementById("back-to-flavors");
+// replace direct getElementById calls with safeGet to avoid crashes if markup missing
+const checkoutModal = safeGet("checkout-modal");
+const checkoutConfirm = safeGet("checkout-confirm");
+const checkoutCancel = safeGet("checkout-cancel");
+const checkoutCity = safeGet("checkout-city");
+const checkoutDelivery = safeGet("checkout-delivery");
+const checkoutPayment = safeGet("checkout-payment");
+const checkoutBtn = safeGet("checkout");
+const backToFlavors = safeGet("back-to-flavors");
 
 /// ===== Цена для пользователя (15 или 13) =====
 let CURRENT_PRICE = 15;
 let CURRENT_DISCOUNT_TYPE = null;
 
-async function loadUserPrice() {
-  // Telegram context (без optional chaining)
-  var tgApp = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
-  var tgUser = (tgApp && tgApp.initDataUnsafe && tgApp.initDataUnsafe.user) ? tgApp.initDataUnsafe.user : null;
+// ✅ мини-кеш на 20 сек (чтобы не спамить бэк при кликах по категориям)
+let _priceCache = { ts: 0, price: 15, type: null };
 
-  var tgNick = (tgUser && tgUser.username) ? ("@" + tgUser.username) : null;
-  var client_chat_id = (tgUser && tgUser.id) ? Number(tgUser.id) : null;
-
-  // если вообще нет телеги — без скидки
-  if (!tgNick && !client_chat_id) {
-    CURRENT_PRICE = 15;
-    CURRENT_DISCOUNT_TYPE = null;
-    return;
-  }
-
+async function loadUserPrice(force) {
   try {
-    const res = await fetch(API_BASE + "/api/price-info", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tgNick: tgNick,             // может быть null
-        tgUser: tgUser || null,     // объект юзера
-        client_chat_id: client_chat_id
-      })
-    });
+    const now = Date.now();
+    if (!force && (now - _priceCache.ts) < 20_000) {
+      CURRENT_PRICE = _priceCache.price;
+      CURRENT_DISCOUNT_TYPE = _priceCache.type;
+      return;
+    }
 
-    const json = await res.json();
+    // Telegram context (без optional chaining)
+    var tgApp = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+    var tgUser = (tgApp && tgApp.initDataUnsafe && tgApp.initDataUnsafe.user) ? tgApp.initDataUnsafe.user : null;
 
-    if (json && json.ok) {
-      CURRENT_PRICE = Number(json.finalPrice || 15);
-      CURRENT_DISCOUNT_TYPE = json.discountType || null;
-    } else {
+    // если миниапп не в Telegram — без скидки
+    if (!tgApp || !tgUser) {
       CURRENT_PRICE = 15;
       CURRENT_DISCOUNT_TYPE = null;
+      _priceCache = { ts: now, price: 15, type: null };
+      return;
     }
+
+    // initData обязателен, иначе бэк вернёт UNAUTHORIZED
+    var initData = (tgApp && typeof tgApp.initData === "string") ? tgApp.initData : "";
+    if (!initData) {
+      CURRENT_PRICE = 15;
+      CURRENT_DISCOUNT_TYPE = null;
+      _priceCache = { ts: now, price: 15, type: null };
+      return;
+    }
+
+    // нормализуем BASE (убираем / в конце)
+    var API_URL = String(API_BASE || "").replace(/\/$/, "") + "/api/price-info";
+
+    var res = await fetchWithTimeout(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-telegram-init-data": initData,
+        "Cache-Control": "no-store"
+      },
+      body: JSON.stringify({}) // пусть будет {}, чтобы express.json не ругался
+    }, FETCH_TIMEOUT_MS);
+
+    // Railway может вернуть HTML/502 -> читаем текст
+    var raw = await res.text();
+
+    // если вернули HTML/пусто — считаем что скидки нет
+    if (!raw || raw[0] === "<") {
+      CURRENT_PRICE = 15;
+      CURRENT_DISCOUNT_TYPE = null;
+      _priceCache = { ts: now, price: 15, type: null };
+      return;
+    }
+
+    var json = null;
+    try { json = JSON.parse(raw); } catch (e) { json = null; }
+
+    // ожидаем { ok:true, finalPrice, discountType }
+    if (!res.ok || !json || json.ok !== true) {
+      CURRENT_PRICE = 15;
+      CURRENT_DISCOUNT_TYPE = null;
+      _priceCache = { ts: now, price: 15, type: null };
+      return;
+    }
+
+    var p = Number(json.finalPrice);
+    if (!Number.isFinite(p) || p <= 0) p = 15;
+
+    CURRENT_PRICE = p;
+    CURRENT_DISCOUNT_TYPE = json.discountType || null;
+
+    _priceCache = { ts: now, price: CURRENT_PRICE, type: CURRENT_DISCOUNT_TYPE };
   } catch (e) {
     CURRENT_PRICE = 15;
     CURRENT_DISCOUNT_TYPE = null;
+    _priceCache = { ts: Date.now(), price: 15, type: null };
   }
 }
+
 
 
 
@@ -684,23 +956,8 @@ checkoutBtn.addEventListener("click", () => {
 
   checkoutDelivery.disabled = true;
   checkoutPayment.disabled = true;
-
-  // Обработка изменения города
-  checkoutCity.addEventListener("input", () => {
-    checkoutDelivery.value = "";
-    checkoutPayment.value = "";
-    checkoutDelivery.disabled = true;
-    checkoutPayment.disabled = true;
-    if (checkoutCity.value) setTimeout(() => showField(checkoutDelivery), 500);
-  });
-
-  // Обработка изменения доставки
-  checkoutDelivery.addEventListener("input", () => {
-    checkoutPayment.value = "";
-    checkoutPayment.disabled = true;
-    if (checkoutDelivery.value) setTimeout(() => showField(checkoutPayment), 500);
-  });
 });
+
 
 // --- Закрытие модалки ---
 checkoutCancel.addEventListener("click", closeCheckout);
@@ -710,138 +967,215 @@ checkoutModal.addEventListener("click", (e) => {
   if (!e.target.closest(".checkout-modal-content")) closeCheckout();
 });
 
-// --- Подтверждение заказа ---
-checkoutConfirm.addEventListener("click", async () => {
-  // 1) Контекст Telegram (без optional chaining, чтобы не "краснело")
-  var tgApp = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
-  var tgUser = (tgApp && tgApp.initDataUnsafe && tgApp.initDataUnsafe.user) ? tgApp.initDataUnsafe.user : null;
+/// --- Подтверждение заказа (защита от даблклика/спама на фронте) ---
+let _sendingOrder = false;
+const ORDER_COOLDOWN_MS = 12_000; // 12 секунд между попытками
+const LS_LAST_ORDER_TS = "cc_last_order_ts";
 
-  // tgNick берем только если есть username
-  var tgNick = (tgUser && tgUser.username) ? ("@" + tgUser.username) : null;
+checkoutConfirm.addEventListener && checkoutConfirm.addEventListener("click", async () => {
+  if (_sendingOrder) return;
 
-  if (!tgNick) {
-    alert("Не удалось определить ваш Telegram ник. Откройте мини-приложение через Telegram и убедитесь, что у вас установлен username.");
+  const nowTs = Date.now();
+  const lastTs = Number(localStorage.getItem(LS_LAST_ORDER_TS) || 0);
+  if (lastTs && (nowTs - lastTs) < ORDER_COOLDOWN_MS) {
+    alert("Подождите пару секунд и попробуйте снова.");
     return;
   }
 
-  const city = checkoutCity.value.trim();
-  const delivery = checkoutDelivery.value.trim();
-  const payment = checkoutPayment.value.trim();
+  // 1) Контекст Telegram (без optional chaining)
+  var tgApp = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+  var tgUser = (tgApp && tgApp.initDataUnsafe && tgApp.initDataUnsafe.user) ? tgApp.initDataUnsafe.user : null;
+
+  // username обязателен (ты на бэке тоже это требуешь)
+  var tgNick = (tgUser && tgUser.username) ? ("@" + tgUser.username) : null;
+  if (!tgApp || !tgUser || !tgNick) {
+    alert("Открой мини-приложение через Telegram и убедись, что у тебя установлен username.");
+    return;
+  }
+
+  // initData ОБЯЗАТЕЛЕН — без него бэк вернёт UNAUTHORIZED
+  var initData = (tgApp && typeof tgApp.initData === "string") ? tgApp.initData : "";
+  if (!initData || initData.length < 10) {
+    alert("Не удалось получить initData. Открой мини-приложение через Telegram (не через браузер).");
+    return;
+  }
+
+  // 2) Валидация полей
+  var city = String(checkoutCity.value || "").trim();
+  var delivery = String(checkoutDelivery.value || "").trim();
+  var payment = String(checkoutPayment.value || "").trim();
 
   if (!city) { alert("Укажите город"); return; }
   if (!delivery) { alert("Выберите способ доставки"); return; }
   if (!payment) { alert("Выберите способ оплаты"); return; }
-  if (cart.length === 0) { alert("Корзина пуста"); return; }
+  if (!cart || cart.length === 0) { alert("Корзина пуста"); return; }
 
-  // Формируем текст заказанных товаров
-  const itemsText = cart
-    .map(item => `${item.category} — ${item.flavor} × ${item.qty} шт = ${item.price * item.qty}€`)
+  // 3) Маппинг (как у тебя было)
+  var deliveryText =
+    delivery === "Pickup" ? "Самовывоз" :
+    delivery === "DHL" ? "DHL" :
+    delivery === "Courier" ? "Курьер" :
+    delivery;
+
+  var paymentText =
+    payment === "Cash" ? "Наличные" :
+    payment === "Card" ? "Карта" :
+    payment === "Crypto" ? "Криптовалюта" :
+    payment;
+
+  // 4) Формируем orderText (ВАЖНО: формат "× N шт" нужен твоему бэку для qty)
+  var itemsText = cart
+    .map(function (item) {
+      var cat = String(item.category || "").trim();
+      var flv = String(item.flavor || "").trim();
+      var qty = Number(item.qty) || 0;
+      var price = Number(item.price) || 0;
+
+      if (!cat || !flv || qty <= 0) return "";
+      return cat + " — " + flv + " × " + qty + " шт = " + (price * qty) + "€";
+    })
+    .filter(function (x) { return x && x.trim(); })
     .join("\n");
 
-  // Дата и время
-  const now = new Date();
-  const orderDate = now.toLocaleDateString("ru-RU");
-  const orderTime = now.toLocaleTimeString("ru-RU");
+  if (!itemsText.trim()) { alert("Корзина пуста"); return; }
 
-  // Обработка способов доставки и оплаты
-  const deliveryText = delivery === "Pickup" ? "DHL" :
-                       delivery === "Courier" ? "Курьер" : delivery;
+  // 5) Подготовка запроса
+  var API_URL = String(API_BASE || "").replace(/\/$/, "") + "/api/send-order";
 
-  const paymentText = payment === "Cash" ? "Наличные" :
-                      payment === "Card" ? "Карта" :
-                      payment === "Crypto" ? "Криптовалюта" : payment;
-
-  // 2) Данные для отправки
-  const orderData = {
-    tgNick, // "@username"
-    city,
+  var orderData = {
+    city: city,
     delivery: deliveryText,
     payment: paymentText,
-    orderText: itemsText,
-    date: orderDate,
-    time: orderTime,
-
-    // Telegram user объект
-    tgUser: tgUser,
-
-    // initData (если нужно будет валидировать подпись)
-    initData: tgApp ? tgApp.initData : null,
-
-    // chat_id пользователя (id телеги)
-    client_chat_id: (tgUser && tgUser.id) ? Number(tgUser.id) : null
+    orderText: itemsText
   };
 
+  // 6) UI lock
+  _sendingOrder = true;
+  localStorage.setItem(LS_LAST_ORDER_TS, String(Date.now()));
+
+  var prevText = checkoutConfirm.textContent;
+  checkoutConfirm.disabled = true;
+  checkoutConfirm.textContent = "Отправляем...";
+
+  // таймаут на запрос
+  var controller = null;
+  var timer = null;
   try {
-    // ✅ нормализуем BASE (убираем / в конце, чтобы не было двойного //)
-    const API_URL = String(API_BASE || "").replace(/\/$/, "") + "/api/send-order";
+    controller = new AbortController();
+    timer = setTimeout(function () { try { controller.abort(); } catch (e) {} }, 12_000);
 
-    console.log("[SEND ORDER] API_URL =", API_URL);
-    console.log("[SEND ORDER] orderData =", orderData);
+    // Create an Idempotency-Key for this order attempt
+    var idemKey = (function () {
+      try {
+        var seed = "send-order|" + Date.now() + "|" + Math.random();
+        var enc = new TextEncoder();
+        var bytes = enc.encode(seed);
+        var sum = 0;
+        for (var i = 0; i < bytes.length; i++) sum = (sum * 31 + bytes[i]) >>> 0;
+        return "miniapp-ord-" + sum.toString(16) + "-" + Math.floor(Math.random()*1e6);
+      } catch (e) { return "miniapp-ord-" + Date.now(); }
+    })();
 
-    const res = await fetch(API_URL, {
+    var res = await fetch(API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(orderData)
+      headers: {
+        "Content-Type": "application/json",
+        "x-telegram-init-data": initData,
+        "Idempotency-Key": idemKey
+      },
+      body: JSON.stringify(orderData),
+      signal: controller.signal
     });
 
-    // ✅ Railway может вернуть HTML/502, поэтому читаем как текст
-    const raw = await res.text();
-    console.log("[SEND ORDER] status =", res.status);
-    console.log("[SEND ORDER] raw =", raw);
+    var raw = await res.text();
+    var json = null;
+    try { json = JSON.parse(raw); } catch (e) { json = null; }
 
-    // ✅ пробуем распарсить JSON
-    let json = null;
-    try { json = JSON.parse(raw); } catch (e) {}
-
-    // ✅ если сервер вернул не 200
+    // 7) Обработка ошибок
     if (!res.ok) {
-      alert("Сервер вернул ошибку: " + res.status + "\n" + (raw ? raw.slice(0, 400) : ""));
+      // частые кейсы
+      if (res.status === 401) {
+        alert("Не удалось подтвердить Telegram-сессию. Закрой мини-апп и открой заново через бота.");
+        return;
+      }
+      if (res.status === 429) {
+        alert("Слишком часто. Подожди минуту и попробуй снова.");
+        return;
+      }
+      if (res.status === 409) {
+        var errCode = (json && json.error) ? json.error : "";
+        if (errCode === "ACTIVE_ORDER_EXISTS") {
+          alert("У вас уже есть активный заказ. Завершите или отмените его, чтобы создать новый.");
+          return;
+        }
+        if (errCode === "REPLAY_DETECTED") {
+          alert("Защита от повтора сработала. Закрой мини-апп и открой заново через Telegram, затем попробуй снова.");
+          return;
+        }
+      }
+
+      // дефолт
+      alert("Сервер вернул ошибку: " + res.status + "\n" + (raw ? raw.slice(0, 300) : ""));
       return;
     }
 
-    // ✅ если 200, но success=false или json не распарсился
     if (!json || !json.success) {
-      alert("Ошибка: " + ((json && json.error) ? json.error : (raw ? raw.slice(0, 400) : "UNKNOWN")));
+      var msg = (json && json.error) ? json.error : (raw ? raw.slice(0, 300) : "UNKNOWN");
+      alert("Ошибка: " + msg);
       return;
     }
 
-    // ✅ УСПЕХ (твой старый код успеха)
-    if (tgApp) {
+    // 8) Успех
+    var onClosed = function () {
+      try {
+        cart = [];
+        updateCart();
+        updateCheckoutButton();
+        closeCheckout();
+      } catch (e) {}
+      try { tgApp.close(); } catch (e) {}
+      // чтобы не копились обработчики
+      try { if (tgApp && tgApp.offEvent) tgApp.offEvent("popupClosed", onClosed); } catch (e) {}
+    };
+
+    if (tgApp && tgApp.showPopup) {
+      try { if (tgApp.offEvent) tgApp.offEvent("popupClosed", onClosed); } catch (e) {}
+      try { tgApp.onEvent("popupClosed", onClosed); } catch (e) {}
+
       tgApp.showPopup({
         title: "Заказ принят ✅",
         message: "Спасибо! Менеджер свяжется с вами.\n\nВаш Telegram: " + tgNick,
         buttons: [{ id: "ok", type: "default", text: "ОК" }]
       });
-
-      tgApp.onEvent("popupClosed", () => {
-        cart = [];
-        updateCart();
-        updateCheckoutButton();
-        closeCheckout();
-        tgApp.close();
-      });
     } else {
       alert("Спасибо! С вами свяжется менеджер.\nВаш Telegram: " + tgNick);
-      cart = [];
-      updateCart();
-      updateCheckoutButton();
-      closeCheckout();
+      onClosed();
     }
 
   } catch (err) {
-    console.error("[SEND ORDER] error:", err);
-    alert("Ошибка сети/скрипта: " + (err && err.message ? err.message : String(err)));
+    var isAbort = (err && (err.name === "AbortError"));
+    alert(isAbort ? "Сервер долго отвечает. Попробуй ещё раз." : ("Ошибка сети/скрипта: " + (err && err.message ? err.message : String(err))));
+  } finally {
+    if (timer) clearTimeout(timer);
+
+    _sendingOrder = false;
+    checkoutConfirm.disabled = false;
+    checkoutConfirm.textContent = prevText;
   }
 });
-
 
 // --- Кнопка назад к вкусам ---
 backToFlavors.addEventListener("click", closeCart);
 
 // Обсервер для обновления кнопки оформления заказа
 const observer = new MutationObserver(updateCheckoutButton);
-const cartList = document.getElementById("cart-list");
-observer.observe(cartList, { childList: true, subtree: true });
+// attach observer only to a real DOM node (do not attach to safe stub)
+const _realCartList = realGet("cart-list");
+if (_realCartList) {
+  observer.observe(_realCartList, { childList: true, subtree: true });
+} else {
+  console.warn("cart-list not found — MutationObserver not attached");
+}
 
 // --- Touch-fix для мобильных ---
 checkoutModal.querySelectorAll("button").forEach(btn => {

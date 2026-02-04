@@ -34,7 +34,8 @@ if (tg) {
   }
 }
 
-const API_BASE = "https://crazyde-production.up.railway.app/api/send-order";
+const API_BASE = "https://crazyde-production.up.railway.app";
+console.log("API_BASE (at load) =", API_BASE);
 
 // new: client-side safety & limits
 const MAX_ITEMS_PER_ORDER = 12;        // максимум уникальных позиций в заказе
@@ -1317,7 +1318,11 @@ checkoutConfirm.addEventListener && checkoutConfirm.addEventListener("click", as
   if (!itemsText.trim()) { alert("Корзина пуста"); return; }
 
   // 5) Подготовка запроса
-  var API_URL = String(API_BASE || "").replace(/\/$/, "") + "/api/send-order";
+  var base = String(API_BASE || "").replace(/\/$/, "");
+if (base.endsWith("/api/send-order")) base = base.replace(/\/api\/send-order$/, "");
+var API_URL = base + "/api/send-order";
+console.log("API_BASE =", API_BASE);
+console.log("API_URL =", API_URL);
 
   var orderData = {
     city: city,

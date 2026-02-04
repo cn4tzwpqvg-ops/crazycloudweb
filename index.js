@@ -34,7 +34,7 @@ if (tg) {
   }
 }
 
-const API_BASE = "https://crazyde-production.up.railway.app";
+const API_BASE = "https://crazyde-production.up.railway.app/api/send-order";
 
 // new: client-side safety & limits
 const MAX_ITEMS_PER_ORDER = 12;        // максимум уникальных позиций в заказе

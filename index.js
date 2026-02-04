@@ -1029,6 +1029,8 @@ async function loadUserPrice(force) {
 
     // нормализуем BASE (убираем / в конце)
     var API_URL = String(API_BASE || "").replace(/\/$/, "") + "/api/price-info";
+console.log("[price-info] API_BASE =", API_BASE);
+console.log("[price-info] API_URL  =", API_URL);
 
     var res = await fetchWithTimeout(API_URL, {
       method: "POST",
@@ -1315,7 +1317,28 @@ checkoutConfirm.addEventListener && checkoutConfirm.addEventListener("click", as
     .filter(function (x) { return x && x.trim(); })
     .join("\n");
 
-  if (!itemsText.trim()) { alert("Корзина пуста"); return; }
+    // ✅ items для бэка (он требует поле "items")
+var items = cart
+  .map(function (item) {
+    var cat = String(item.category || "").trim();
+    var flv = String(item.flavor || "").trim();
+    var qty = Number(item.qty) || 0;
+    var price = Number(item.price) || 0;
+
+    if (!cat || !flv || qty <= 0) return null;
+
+    return {
+      category: cat,
+      flavor: flv,
+      qty: qty,
+      price: price
+    };
+  })
+  .filter(Boolean);
+
+
+  if (!items.length) { alert("Корзина пуста"); return; }
+
 
   // 5) Подготовка запроса
   var base = String(API_BASE || "").replace(/\/$/, "");
@@ -1323,13 +1346,16 @@ if (base.endsWith("/api/send-order")) base = base.replace(/\/api\/send-order$/, 
 var API_URL = base + "/api/send-order";
 console.log("API_BASE =", API_BASE);
 console.log("API_URL =", API_URL);
+console.log("orderData =", orderData);
+
 
   var orderData = {
-    city: city,
-    delivery: deliveryText,
-    payment: paymentText,
-    orderText: itemsText
-  };
+  city: city,
+  delivery: deliveryText,
+  payment: paymentText,
+  orderText: itemsText,
+  items: items
+};
 
   // 6) UI lock
   _sendingOrder = true;

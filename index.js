@@ -1352,13 +1352,17 @@ checkoutConfirm.addEventListener && checkoutConfirm.addEventListener("click", as
         return "miniapp-ord-" + sum.toString(16) + "-" + Math.floor(Math.random()*1e6);
       } catch (e) { return "miniapp-ord-" + Date.now(); }
     })();
+    console.log("API_URL =", API_URL);
+console.log("origin =", location.origin);
+console.log("initData len =", (initData && initData.length) || 0);
+
 
     var res = await fetch(API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-telegram-init-data": initData,
-        "Idempotency-Key": idemKey
+          // "Idempotency-Key": idemKey
       },
       body: JSON.stringify(orderData),
       signal: controller.signal
